@@ -223,6 +223,24 @@ pub async fn auth_login(
     event: Option<Extension<WideEventHandle>>,
     Json(payload): Json<AuthLoginPayload>,
 ) -> anyhow::Result<Json<AuthLoginResponse>, ApiError> {
+    // Validate the issued challenge format before accessing Redis.
+    let (challenge, timestamp) = payload
+        .k1
+        .split_once('_')
+        .ok_or_else(|| ApiError::InvalidArgument("Invalid k1 format".to_string()))?;
+    if challenge.len() != 64
+        || !challenge
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        || timestamp.is_empty()
+        || !timestamp.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(ApiError::InvalidArgument("Invalid k1 format".to_string()));
+    }
+    let timestamp = timestamp
+        .parse::<u64>()
+        .map_err(|_| ApiError::InvalidArgument("Invalid timestamp in k1".to_string()))?;
+
     let k1_consumed = state.k1_cache.take(&payload.k1).await.map_err(|e| {
         tracing::error!(error = %e, "Auth login failed: Unable to consume k1");
         ApiError::ServerErr("Failed to validate k1".to_string())
@@ -231,15 +249,6 @@ pub async fn auth_login(
     if !k1_consumed {
         return Err(ApiError::InvalidArgument("Invalid k1".to_string()));
     }
-
-    let k1_parts: Vec<&str> = payload.k1.split('_').collect();
-    if k1_parts.len() != 2 {
-        return Err(ApiError::InvalidArgument("Invalid k1 format".to_string()));
-    }
-
-    let timestamp = k1_parts[1]
-        .parse::<u64>()
-        .map_err(|_| ApiError::InvalidArgument("Invalid timestamp in k1".to_string()))?;
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

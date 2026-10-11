@@ -3,10 +3,12 @@ use axum::body::Body;
 use axum::http::{self, Request, StatusCode};
 use bitcoin::secp256k1::{Keypair, Secp256k1, SecretKey};
 use chrono::{Duration, Local, Utc};
+use deadpool_redis::redis::AsyncCommands;
 use http_body_util::BodyExt;
 use serde_json::json;
 use tower::ServiceExt;
 
+use crate::cache::redis_client::RedisClient;
 use crate::db::user_repo::UserRepository;
 use crate::tests::common::{TestUser, create_test_user, setup_test_app};
 use crate::types::{AuthLoginResponse, RegisterResponse, UserStatus};
@@ -97,6 +99,117 @@ async fn test_auth_login_reused_k1_is_rejected() {
         .unwrap();
 
     assert_eq!(second_response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_auth_login_preserves_other_redis_keys() {
+    let (app, app_state, _guard) = setup_test_app().await;
+    let client = RedisClient::new(&app_state.config.redis_url).unwrap();
+    let mut conn = client.get_connection().await.unwrap();
+    let timestamp = Utc::now().timestamp().to_string();
+    let challenge_shaped_key = format!("{}_{}", "ab".repeat(32), timestamp);
+    let entries = [
+        ("maintenance:last_round_timestamp", "1234567890"),
+        ("maintenance:round_counter", "5"),
+        ("invoice:victim-tx", "lnbc-test-invoice"),
+        ("email_verification:victim:code", "123456"),
+        ("email_verification:victim:email", "test@example.com"),
+        (challenge_shaped_key.as_str(), timestamp.as_str()),
+    ];
+
+    for (key, value) in entries {
+        let _: () = conn.set(key, value).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/login")
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "k1": key, "key": "00", "sig": "00" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let remaining: Option<String> = conn.get(key).await.unwrap();
+        assert_eq!(remaining.as_deref(), Some(value), "key deleted: {key}");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "key: {key}");
+    }
+}
+
+#[tokio::test]
+async fn test_auth_login_rejects_malformed_k1_before_consuming_it() {
+    let (app, app_state, _guard) = setup_test_app().await;
+    let timestamp = Utc::now().timestamp() as u64;
+    let hex = "ab".repeat(32);
+    let malformed = [
+        String::new(),
+        hex.clone(),
+        format!("{}_{}", "ab".repeat(31), timestamp),
+        format!("{}_{}", "ab".repeat(33), timestamp),
+        format!("{}_{}", "gg".repeat(32), timestamp),
+        format!("{}_{}", hex.to_uppercase(), timestamp),
+        format!("{hex}_"),
+        format!("{hex}_+{timestamp}"),
+        format!("{hex}_-{timestamp}"),
+        format!("{hex}_{timestamp}_extra"),
+        format!("{hex}_18446744073709551616"),
+    ];
+
+    for k1 in malformed {
+        app_state
+            .k1_cache
+            .insert_with_timestamp(&k1, timestamp)
+            .await
+            .unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/auth/login")
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "k1": k1, "key": "00", "sig": "00" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(app_state.k1_cache.contains(&k1).await.unwrap());
+    }
+}
+
+#[tokio::test]
+async fn test_k1_store_namespace_ttl_and_atomic_consumption() {
+    let (_app, app_state, _guard) = setup_test_app().await;
+    let store = &app_state.k1_cache;
+    let k1 = store.issue_k1().await.unwrap();
+    let client = RedisClient::new(&app_state.config.redis_url).unwrap();
+    let mut conn = client.get_connection().await.unwrap();
+
+    let raw_exists: bool = conn.exists(&k1).await.unwrap();
+    assert!(!raw_exists);
+    let ttl: i64 = conn.ttl(format!("k1:{k1}")).await.unwrap();
+    assert!((1..=600).contains(&ttl));
+
+    let _: () = conn.set(&k1, 42).await.unwrap();
+    let (first, second) = tokio::join!(store.take(&k1), store.take(&k1));
+    assert_ne!(first.unwrap(), second.unwrap());
+    assert!(!store.contains(&k1).await.unwrap());
+    assert!(!store.take(&k1).await.unwrap());
+
+    store.insert_with_timestamp(&k1, 42).await.unwrap();
+    assert!(store.contains(&k1).await.unwrap());
+    store.remove(&k1).await.unwrap();
+    assert!(!store.contains(&k1).await.unwrap());
+    let raw_value: i64 = conn.get(&k1).await.unwrap();
+    assert_eq!(raw_value, 42);
 }
 
 #[tracing_test::traced_test]
