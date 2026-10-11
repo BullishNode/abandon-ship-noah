@@ -5,6 +5,8 @@ use rand::Rng;
 
 use super::redis_client::RedisClient;
 
+const K1_PREFIX: &str = "k1:";
+
 /// Handles issuing and validating k1 challenges in Redis.
 #[derive(Clone)]
 pub struct K1Store {
@@ -35,21 +37,24 @@ impl K1Store {
     /// Checks whether the provided k1 exists in the cache.
     pub async fn contains(&self, k1: &str) -> anyhow::Result<bool> {
         let mut conn = self.client.get_connection().await?;
-        let exists: bool = conn.exists(k1).await?;
+        let exists: bool = conn.exists(format!("{K1_PREFIX}{k1}")).await?;
         Ok(exists)
     }
 
     /// Removes a k1 token from the cache.
     pub async fn remove(&self, k1: &str) -> anyhow::Result<()> {
         let mut conn = self.client.get_connection().await?;
-        let _: () = conn.del(k1).await?;
+        let _: () = conn.del(format!("{K1_PREFIX}{k1}")).await?;
         Ok(())
     }
 
     /// Atomically consumes a k1 token so it cannot be reused.
     pub async fn take(&self, k1: &str) -> anyhow::Result<bool> {
         let mut conn = self.client.get_connection().await?;
-        let value: Option<i64> = cmd("GETDEL").arg(k1).query_async(&mut conn).await?;
+        let value: Option<i64> = cmd("GETDEL")
+            .arg(format!("{K1_PREFIX}{k1}"))
+            .query_async(&mut conn)
+            .await?;
         Ok(value.is_some())
     }
 
@@ -68,7 +73,9 @@ impl K1Store {
     async fn persist(&self, k1: &str, timestamp: u64) -> anyhow::Result<()> {
         let mut conn = self.client.get_connection().await?;
         let ttl_seconds = u64::try_from(self.ttl_seconds).unwrap_or(u64::MAX);
-        let _: () = conn.set_ex(k1, timestamp as i64, ttl_seconds).await?;
+        let _: () = conn
+            .set_ex(format!("{K1_PREFIX}{k1}"), timestamp as i64, ttl_seconds)
+            .await?;
         Ok(())
     }
 }
