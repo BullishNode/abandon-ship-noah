@@ -1,0 +1,5 @@
+- Schedule recurring Bitcoin payments.
+- Use Noah in Spanish or Japanese, with localized dates, amounts, and notifications.
+- Enjoy improved layouts on larger screens and smoother navigation and scrolling.
+- Find more places to spend bitcoin with updated BTC Map data.
+- Reliability fixes for wallet setup, wallet deletion, and automatic deposits.

@@ -4,6 +4,10 @@
   <dict>
     <key>APP_VARIANT</key>
     <string>$(APP_VARIANT)</string>
+    <key>BGTaskSchedulerPermittedIdentifiers</key>
+    <array>
+      <string>com.expo.modules.backgroundtask.processing</string>
+    </array>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
     <key>CFBundleDevelopmentRegion</key>
@@ -105,6 +109,7 @@
     <array>
       <string>remote-notification</string>
       <string>fetch</string>
+      <string>processing</string>
     </array>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
