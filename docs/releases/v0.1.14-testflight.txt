@@ -1,0 +1,6 @@
+- Added recurring payments.
+- Added Spanish and Japanese translations.
+- Added iPhone Duo support.
+- Updated BTC Map data.
+- Fixed repeated fee estimates for automatic deposits.
+- Fixed issues with wallet setup, wallet deletion, and scrolling.
