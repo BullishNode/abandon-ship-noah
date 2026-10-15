@@ -44,7 +44,6 @@ import {
 } from "../constants";
 import {
   clearMnemonic,
-  deriveStoreNextKeypair,
   peakKeyPair,
   getMnemonic,
   getStoredMnemonic,
@@ -126,12 +125,6 @@ const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, 
   if (loadResult.isErr()) {
     log.error("Failed to load wallet", [loadResult.error]);
     return err(loadResult.error);
-  }
-
-  const deriveResult = await deriveStoreNextKeypair();
-  if (deriveResult.isErr()) {
-    log.error("Failed to derive store next keypair", [deriveResult.error]);
-    return err(deriveResult.error);
   }
 
   const keypairResult = await peakKeyPair(0);
