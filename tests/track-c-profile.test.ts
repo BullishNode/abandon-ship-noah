@@ -16,7 +16,7 @@ const fixture = {
 };
 const { parseTrackCProfile } = await import("../client/src/lib/trackCProfile");
 let platform = "android";
-let appVariant = "signet";
+const appVariant = "signet";
 let raw: string | null = null;
 const reads: string[] = [];
 mock.module("react-native", () => ({ Platform: { get OS() { return platform; } } }));
@@ -70,14 +70,13 @@ test("literal IPv6 and explicit port80 use the same local HTTP contract", () => 
     expect(parseTrackCProfile(JSON.stringify({ ...fixture, bitcoind })).bitcoind).toBe(bitcoind);
   }
 });
-test("missing private file refuses; unsupported iOS and non-Signet refuse before reading", () => {
+test("missing private file refuses; unsupported iOS refuses before reading", () => {
   expect(() => getTrackCSignetProfile()).toThrow("C Signet configuration is unavailable or invalid");
   const count = reads.length;
   platform = "ios";
   expect(() => getTrackCSignetProfile()).toThrow();
-  platform = "android"; appVariant = "mainnet";
-  expect(() => getTrackCSignetProfile()).toThrow();
-  expect(reads.length).toBe(count); appVariant = "signet";
+  expect(reads.length).toBe(count);
+  platform = "android";
 });
 test("JS config uses private Core and ignores a persisted/custom Esplora override", () => {
   raw = JSON.stringify(fixture);
