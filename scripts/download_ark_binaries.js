@@ -1,214 +1,110 @@
+// C requires actual owned native artifacts. This installer never downloads stock binaries.
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
-const { execSync } = require("child_process");
+const crypto = require("crypto");
 
-const projectRoot = process.cwd();
+const SDK_COMMIT = "ca568d5a28aa16a2a4fbb853531d869ad22a9724";
+const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64"];
+const LIBRARIES = ["libbark_cpp.a", "libcxxbridge1.a"];
+const EXPECTED_FILES = ABIS.flatMap((abi) => LIBRARIES.map((lib) => `${abi}/${lib}`)).sort();
+const digest = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
-// Find the path to react-native-nitro-ark in expected locations
-// Should really be in the root of the project, but Bun Windows works differently.
-const nitroArkPath = [
-  path.resolve(projectRoot, "node_modules", "react-native-nitro-ark"),
-  path.resolve(projectRoot, "client", "node_modules", "react-native-nitro-ark"),
-].find((p) => fs.existsSync(p));
-
-if (!nitroArkPath) {
-  throw new Error(
-    "react-native-nitro-ark not found in node_modules or client/node_modules",
-  );
+function check(condition, message) {
+  if (!condition) throw new Error(message);
 }
 
-// Define other constants conditionally. The script already handles the case where nitroArkPath is null.
-const nitroPackageJson = require(path.join(nitroArkPath, "package.json"));
-
-const NITRO_ARK_VERSION = `v${nitroPackageJson.version}`;
-
-// --- Configuration ---
-const XC_FRAMEWORK_URL = `https://github.com/smolcars/react-native-nitro-ark/releases/download/${NITRO_ARK_VERSION}/Ark.xcframework.zip`;
-const XC_FRAMEWORK_CXX_BRIDGE_URL = `https://github.com/smolcars/react-native-nitro-ark/releases/download/${NITRO_ARK_VERSION}/ArkCxxBridge.xcframework.zip`;
-const JNI_LIBS_ZIP_URL = `https://github.com/smolcars/react-native-nitro-ark/releases/download/${NITRO_ARK_VERSION}/jniLibs.zip`;
-
-const tempDir = path.resolve(projectRoot, "temp_ark_downloads");
-
-// iOS paths
-const xcFrameworkZipPath = path.join(tempDir, "Ark.xcframework.zip");
-const xcFrameworkDestPath = path.join(nitroArkPath, "Ark.xcframework");
-const xcFrameworkCxxBridgeZipPath = path.join(
-  tempDir,
-  "ArkCxxBridge.xcframework.zip",
-);
-const xcFrameworkCxxBrigeDestPath = path.join(
-  nitroArkPath,
-  "ArkCxxBridge.xcframework",
-);
-const unzippedFrameworkContainer = path.join(tempDir, "target");
-const unzippedFrameworkPath = path.join(
-  unzippedFrameworkContainer,
-  "Ark.xcframework",
-);
-const unzippedFrameworkCxxBrigeContainer = path.join(tempDir, "target");
-const unzippedCxxBridgeFrameworkPath = path.join(
-  unzippedFrameworkContainer,
-  "ArkCxxBridge.xcframework",
-);
-
-// Android paths
-const jniLibsZipPath = path.join(tempDir, "jniLibs.zip");
-const jniLibsDestPath = path.resolve(
-  nitroArkPath,
-  "android",
-  "src",
-  "main",
-  "jniLibs",
-);
-const unzippedJniLibsPath = path.join(tempDir, "jniLibs");
-
-/**
- * Downloads a file from a URL to a destination path.
- * @param {string} url The URL to download from.
- * @param {string} dest The destination file path.
- * @returns {Promise<void>}
- */
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https
-      .get(url, (response) => {
-        // Handle redirects
-        if (
-          response.statusCode >= 300 &&
-          response.statusCode < 400 &&
-          response.headers.location
-        ) {
-          console.log(`Redirected to ${response.headers.location}`);
-          return download(response.headers.location, dest)
-            .then(resolve)
-            .catch(reject);
-        }
-        if (response.statusCode !== 200) {
-          return reject(
-            new Error(
-              `Failed to download '${url}' (status: ${response.statusCode})`,
-            ),
-          );
-        }
-        response.pipe(file);
-        file.on("finish", () => {
-          file.close((err) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          });
-        });
-      })
-      .on("error", (err) => {
-        fs.unlink(dest, () => {}); // Clean up the file
-        reject(err);
-      });
-  });
+function regularFile(filename) {
+  const stat = fs.lstatSync(filename);
+  check(stat.isFile() && !stat.isSymbolicLink(), `Expected regular file: ${filename}`);
+  return stat;
 }
 
-async function setupIos() {
-  // --- iOS Setup ---
-  console.log("\n--- Starting iOS Setup ---");
-  if (fs.existsSync(xcFrameworkDestPath)) {
-    console.log(`Removing existing framework at ${xcFrameworkDestPath}`);
-    fs.rmSync(xcFrameworkDestPath, { recursive: true, force: true });
-  }
-  console.log(`Downloading iOS framework from ${XC_FRAMEWORK_URL}...`);
-  await download(XC_FRAMEWORK_URL, xcFrameworkZipPath);
-  console.log("iOS download complete.");
-  console.log(`Unzipping ${path.basename(xcFrameworkZipPath)}...`);
-  execSync(`unzip -o "${xcFrameworkZipPath}" -d "${tempDir}"`);
-  console.log("iOS unzip complete.");
-  if (!fs.existsSync(unzippedFrameworkPath)) {
-    throw new Error(`Expected framework not found at ${unzippedFrameworkPath}`);
-  }
-  console.log(`Moving Ark.xcframework to ${nitroArkPath}`);
-  fs.renameSync(unzippedFrameworkPath, xcFrameworkDestPath);
-
-  if (fs.existsSync(xcFrameworkCxxBrigeDestPath)) {
-    console.log(
-      `Removing existing framework at ${xcFrameworkCxxBrigeDestPath}`,
-    );
-    fs.rmSync(xcFrameworkCxxBrigeDestPath, { recursive: true, force: true });
-  }
-  console.log(
-    `Downloading iOS CxxBridge framework from ${XC_FRAMEWORK_CXX_BRIDGE_URL}...`,
-  );
-  await download(XC_FRAMEWORK_CXX_BRIDGE_URL, xcFrameworkCxxBridgeZipPath);
-  console.log("iOS CxxBridge download complete.");
-  console.log(`Unzipping ${path.basename(xcFrameworkCxxBridgeZipPath)}...`);
-  execSync(`unzip -o "${xcFrameworkCxxBridgeZipPath}" -d "${tempDir}"`);
-  console.log("iOS CxxBridge unzip complete.");
-  if (!fs.existsSync(unzippedFrameworkCxxBrigeContainer)) {
-    throw new Error(
-      `Expected framework not found at ${unzippedFrameworkCxxBrigeContainer}`,
-    );
-  }
-  console.log(`Moving ArkCxxBridge.xcframework to ${nitroArkPath}`);
-  fs.renameSync(unzippedCxxBridgeFrameworkPath, xcFrameworkCxxBrigeDestPath);
-
-  console.log("--- iOS Setup Complete ---\n");
+function exactKeys(value, keys, label) {
+  check(value && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
+  check(JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys.sort()), `${label} fields differ`);
 }
 
-async function setupAndroid() {
-  // --- Android Setup ---
-  console.log("--- Starting Android Setup ---");
-  if (fs.existsSync(jniLibsDestPath)) {
-    console.log(`Removing existing jniLibs at ${jniLibsDestPath}`);
-    fs.rmSync(jniLibsDestPath, { recursive: true, force: true });
-  }
-  console.log(`Downloading Android binaries from ${JNI_LIBS_ZIP_URL}...`);
-  await download(JNI_LIBS_ZIP_URL, jniLibsZipPath);
-  console.log("Android download complete.");
-  console.log(`Unzipping ${path.basename(jniLibsZipPath)}...`);
-  execSync(`unzip -o "${jniLibsZipPath}" -d "${tempDir}"`);
-  console.log("Android unzip complete.");
-  if (!fs.existsSync(unzippedJniLibsPath)) {
-    throw new Error(`Expected jniLibs not found at ${unzippedJniLibsPath}`);
-  }
-  console.log(`Moving jniLibs to ${path.dirname(jniLibsDestPath)}`);
-  fs.renameSync(unzippedJniLibsPath, jniLibsDestPath);
-  console.log("--- Android Setup Complete ---\n");
+function syncDirectory(directory) {
+  const fd = fs.openSync(directory, "r");
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
 
-/**
- * Main function to run the postinstall steps.
- */
-async function main() {
-  console.log("Running postinstall script for react-native-nitro-ark...");
-
-  // Ensure node_modules/react-native-nitro-ark exists
-  if (!fs.existsSync(nitroArkPath)) {
-    console.log(
-      "react-native-nitro-ark not found in node_modules, skipping script.",
-    );
-    return;
+function installOwnedAndroid(projectRoot, manifestPath) {
+  // The manifest is public, reviewed build evidence, not a runtime qualification flag.
+  regularFile(manifestPath);
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  exactKeys(manifest, ["schema_version", "platform", "sdk_git", "sdk_commit", "nitro_git", "nitro_commit", "package_version", "package_sha256", "files"], "Artifact manifest");
+  check(manifest.schema_version === 1 && manifest.platform === "android", "Only owned Android artifact schema 1 is supported");
+  check(manifest.sdk_git === "https://github.com/BullishNode/abandon-ship-bark.git" && manifest.sdk_commit === SDK_COMMIT, "Artifact SDK source differs");
+  check(manifest.nitro_git === "https://github.com/BullishNode/abandon-ship-nitro-ark.git" && /^[0-9a-f]{40}$/.test(manifest.nitro_commit), "Artifact Nitro source differs");
+  check(/^[0-9a-f]{64}$/.test(manifest.package_sha256), "Invalid package digest");
+  check(Array.isArray(manifest.files) && manifest.files.length === EXPECTED_FILES.length, "Incomplete Android artifact set");
+  const packageDirectory = [
+    path.join(projectRoot, "node_modules/react-native-nitro-ark"),
+    path.join(projectRoot, "client/node_modules/react-native-nitro-ark"),
+  ].find((candidate) => fs.existsSync(candidate));
+  check(packageDirectory, "Owned Nitro package is not installed");
+  const packageFile = path.join(packageDirectory, "package.json");
+  regularFile(packageFile);
+  const packageBytes = fs.readFileSync(packageFile);
+  check(digest(packageBytes) === manifest.package_sha256, "Installed Nitro package digest differs");
+  check(JSON.parse(packageBytes).version === manifest.package_version, "Installed Nitro version differs");
+  const actualPaths = manifest.files.map((entry) => entry.path).sort();
+  check(JSON.stringify(actualPaths) === JSON.stringify(EXPECTED_FILES), "Unexpected or duplicate artifact paths");
+  const sourceRoot = path.join(path.dirname(path.resolve(manifestPath)), "jniLibs");
+  for (const entry of manifest.files) {
+    exactKeys(entry, ["path", "bytes", "sha256"], "Artifact file");
+    check(Number.isSafeInteger(entry.bytes) && entry.bytes > 0, "Invalid artifact byte count");
+    check(/^[0-9a-f]{64}$/.test(entry.sha256), "Invalid artifact digest");
+    // Paths are the exact fixed ABI/library set; no archive extraction or arbitrary paths.
+    const filename = path.join(sourceRoot, entry.path);
+    const parent = fs.lstatSync(path.dirname(filename));
+    check(parent.isDirectory() && !parent.isSymbolicLink(), "Artifact ABI directory must be real");
+    check(regularFile(filename).size === entry.bytes, "Artifact byte count differs");
+    check(digest(fs.readFileSync(filename)) === entry.sha256, "Artifact digest differs");
   }
-
-  // Create a temporary directory for downloads
-  fs.mkdirSync(tempDir, { recursive: true });
-
+  // All identities and source bytes are validated before touching the current payload.
+  const parent = path.join(packageDirectory, "android/src/main");
+  check(fs.statSync(parent).isDirectory(), "Nitro Android destination is missing");
+  const destination = path.join(parent, "jniLibs");
+  if (fs.existsSync(destination)) {
+    const current = fs.lstatSync(destination);
+    check(current.isDirectory() && !current.isSymbolicLink(), "Current JNI destination must be a real directory");
+  }
+  const staging = fs.mkdtempSync(path.join(parent, ".c-jni-staging-"));
+  const backup = `${staging}-previous`;
+  let previousMoved = false;
+  let installed = false;
   try {
-    await Promise.all([setupIos(), setupAndroid()]);
-
-    console.log(
-      "Postinstall script for react-native-nitro-ark finished successfully!",
-    );
-  } catch (error) {
-    console.error("An error occurred during the postinstall script:");
-    console.error(error);
-    process.exit(1);
-  } finally {
-    // Cleanup
-    if (fs.existsSync(tempDir)) {
-      console.log(`Cleaning up temporary directory: ${tempDir}`);
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    for (const abi of ABIS) fs.mkdirSync(path.join(staging, abi));
+    for (const entry of manifest.files) {
+      const target = path.join(staging, entry.path);
+      fs.copyFileSync(path.join(sourceRoot, entry.path), target, fs.constants.COPYFILE_EXCL);
+      const copied = fs.readFileSync(target);
+      check(copied.length === entry.bytes && digest(copied) === entry.sha256, "Staged artifact changed during copy");
+      const fd = fs.openSync(target, "r");
+      try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     }
+    fs.writeFileSync(path.join(staging, "c-native-build-manifest.json"), JSON.stringify(manifest, null, 2) + "\n", { flag: "wx" });
+    const receipt = fs.openSync(path.join(staging, "c-native-build-manifest.json"), "r");
+    try { fs.fsyncSync(receipt); } finally { fs.closeSync(receipt); }
+    for (const abi of ABIS) syncDirectory(path.join(staging, abi));
+    syncDirectory(staging);
+    if (fs.existsSync(destination)) { fs.renameSync(destination, backup); previousMoved = true; }
+    try { fs.renameSync(staging, destination); installed = true; syncDirectory(parent); }
+    catch (error) {
+      if (!installed && previousMoved) { fs.renameSync(backup, destination); previousMoved = false; syncDirectory(parent); }
+      throw error;
+    }
+    if (previousMoved) fs.rmSync(backup, { recursive: true });
+    return manifest;
+  } finally {
+    if (!installed) fs.rmSync(staging, { recursive: true, force: true });
+    // A backup surviving an install/cleanup failure is preserved for inspection.
   }
 }
 
-main();
+if (require.main === module) {
+  installOwnedAndroid(process.cwd(), path.join(process.cwd(), "native-ark-artifacts.json"));
+}
+module.exports = { installOwnedAndroid };
