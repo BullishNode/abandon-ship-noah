@@ -1,0 +1,30 @@
+{
+  "Nitro_source": "09499da3b8782b49300968c2e9a1199202918b37",
+  "SDK": "69ca8cce9501560629169c2894ce9d74df9cb1cd",
+  "package": "react-native-nitro-ark-0.0.146.tgz",
+  "package_sha256": "4fab56ba71320b5d2f52353ce205dfcb6d46bf69e2e81b08ba9b76ec3495caf4",
+  "package_bytes": 11895182,
+  "ABI": "x86_64",
+  "native_artifacts": {
+    "cxx.h": {
+      "bytes": 29568,
+      "sha256": "ea2c1f9fe95b02f055836dd75e22b558f616385a522ec9beeaba8d043c3a32d8"
+    },
+    "ark_cxx.h": {
+      "bytes": 55501,
+      "sha256": "a510264b03823be5fff2d2c40eb67205d5632547557b1b2fa5a94a8708c96707"
+    },
+    "libcxxbridge1.a": {
+      "bytes": 324540,
+      "sha256": "191b7fb43f80cfb1df7f50d11426b49228922d8048433d3cc1e882bda59f6c6c"
+    },
+    "libbark_cpp.a": {
+      "bytes": 42674074,
+      "sha256": "3ca564e8043f0aeadb2986bd4f694c74d0af12e3ee148a81cc0ddeea33871b59"
+    }
+  },
+  "packaging_hooks_removed": {
+    "prepare": "bob build"
+  },
+  "scope": "Privateownedpackage with actualbuiltJS/types/CXXheaders/Ruststaticarchives; no APK/JNIlink/device/enrollment/payment, ownedendpointprofile+backendcompat pending"
+}
