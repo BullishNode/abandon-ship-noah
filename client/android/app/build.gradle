@@ -209,6 +209,27 @@ android {
     }
 }
 
+// The explicit A profile is an isolated qualification build, never the default.
+def ownedAProfile = 'track-a-two-step-per-key'
+def nativeOwnedProfile = System.getenv('NOAH_ARK_PROFILE')
+def jsOwnedProfile = System.getenv('EXPO_PUBLIC_NOAH_PROFILE')
+if (nativeOwnedProfile != null || jsOwnedProfile != null) {
+    if (nativeOwnedProfile != ownedAProfile || jsOwnedProfile != ownedAProfile) {
+        throw new GradleException('Both prepared A signet profiles are required')
+    }
+    providers.exec {
+        workingDir(rootDir)
+        commandLine('node', file('../../../scripts/prepare_owned_android_trust.cjs').absolutePath, 'check')
+    }.result.get().assertNormalExitValue()
+    android.sourceSets.signet.manifest.srcFile('owned-a-trust/AndroidManifest.xml')
+    android.sourceSets.signet.res.srcDir('owned-a-trust/res')
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks.any { it.name.toLowerCase().contains('mainnet') || it.name.toLowerCase().contains('regtest') }) {
+            throw new GradleException('Owned A trust is signet only')
+        }
+    }
+}
+
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
 // android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini
