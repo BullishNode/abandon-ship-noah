@@ -30,8 +30,8 @@ fn invoice_in_currency(currency: Currency, amount: u64, hash: Option<sha256::Has
         .build_signed(|hash| Secp256k1::new().sign_ecdsa_recoverable(hash, &SecretKey::from_slice(&[3; 32]).unwrap()))
         .unwrap().to_string()
 }
-async fn user(state: &AppState) -> (TestUser, String) {
-    let user = TestUser::new();
+async fn user(state: &AppState, key_byte: u8) -> (TestUser, String) {
+    let user = TestUser::new_with_key(&[key_byte; 32]);
     sqlx::query("INSERT INTO users (pubkey, lightning_address) VALUES ($1, $2)")
         .bind(user.pubkey().to_string()).bind(format!("test-{}@localhost", uuid::Uuid::new_v4()))
         .execute(&state.db_pool).await.unwrap();
@@ -59,8 +59,9 @@ async fn pending(state: &AppState, owner: &str) -> String {
 #[tokio::test]
 async fn lnurl_request_owner_and_identical_retry_preserve_assignment_and_ttl() {
     let (app, state, _guard) = setup_test_app().await;
-    let (a, token_a) = user(&state).await;
-    let (b, token_b) = user(&state).await;
+    let (a, token_a) = user(&state, 1).await;
+    let (b, token_b) = user(&state, 2).await;
+    assert_ne!(a.pubkey(), b.pubkey());
     let owner = a.pubkey().to_string();
     let id = pending(&state, &owner).await;
     let key = format!("invoice:{id}");
@@ -87,7 +88,7 @@ async fn lnurl_request_owner_and_identical_retry_preserve_assignment_and_ttl() {
 #[tokio::test]
 async fn lnurl_request_wrong_hash_amount_network_and_malformed_do_not_consume() {
     let (app, state, _guard) = setup_test_app().await;
-    let (a, token) = user(&state).await;
+    let (a, token) = user(&state, 1).await;
     let owner = a.pubkey().to_string();
     let id = pending(&state, &owner).await;
     let mut conn = connection(&state).await;
@@ -117,7 +118,7 @@ async fn lnurl_request_wrong_hash_amount_network_and_malformed_do_not_consume() 
 #[tokio::test]
 async fn lnurl_request_concurrent_assignments_cannot_replace_winner() {
     let (_app, state, _guard) = setup_test_app().await;
-    let (a, _) = user(&state).await;
+    let (a, _) = user(&state, 1).await;
     let owner = a.pubkey().to_string();
     let id = pending(&state, &owner).await;
     let first = invoice(Network::Regtest, 100_000, Some(digest()), 1);
@@ -137,7 +138,7 @@ async fn lnurl_request_concurrent_assignments_cannot_replace_winner() {
 #[tokio::test]
 async fn lnurl_request_missing_expired_legacy_and_invalid_context_fail_closed() {
     let (_app, state, _guard) = setup_test_app().await;
-    let (a, _) = user(&state).await;
+    let (a, _) = user(&state, 1).await;
     let owner = a.pubkey().to_string();
     let valid = invoice(Network::Regtest, 100_000, Some(digest()), 1);
     let missing = uuid::Uuid::new_v4().to_string();
@@ -182,7 +183,7 @@ async fn lnurl_request_signet_signed_invoice_and_expiry_are_distinct_from_reques
     use crate::cache::invoice_store::validate_lnurl_invoice;
     use lightning_invoice::Bolt11Invoice;
     let (app, state, _guard) = setup_test_app().await;
-    let (a, token) = user(&state).await;
+    let (a, token) = user(&state, 1).await;
     let owner = a.pubkey().to_string();
     let id = uuid::Uuid::new_v4().to_string();
     state.invoice_store.create_request(&id, InvoiceRequestContext::new(
