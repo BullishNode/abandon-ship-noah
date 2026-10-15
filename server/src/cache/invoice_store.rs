@@ -106,6 +106,7 @@ pub(crate) fn validate_lnurl_invoice(
             (Network::Bitcoin, Currency::Bitcoin)
                 | (Network::Testnet, Currency::BitcoinTestnet)
                 | (Network::Signet, Currency::Signet)
+                | (Network::Signet, Currency::BitcoinTestnet)
                 | (Network::Regtest, Currency::Regtest)
         ),
         "Device invoice network mismatch"

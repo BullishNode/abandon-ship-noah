@@ -389,3 +389,28 @@ async fn lnurl_request_signet_signed_invoice_and_expiry_are_distinct_from_reques
         Some(valid)
     );
 }
+
+// BOLT11 testnet currency does not identify the Bitcoin signet genesis by itself.
+// The configured owned Ark/chain identity is qualified separately.
+#[test]
+fn lnurl_request_signet_accepts_supported_signed_currencies_without_network_aliases() {
+    use crate::cache::invoice_store::validate_lnurl_invoice;
+    use lightning_invoice::Bolt11Invoice;
+    let tb = invoice_in_currency(Currency::BitcoinTestnet, 100_000, Some(digest()), 9, None);
+    let parsed: Bolt11Invoice = tb.parse().unwrap();
+    parsed.check_signature().unwrap();
+    assert_eq!(parsed.currency(), Currency::BitcoinTestnet);
+    assert_eq!(parsed.network(), Network::Testnet);
+    validate_lnurl_invoice(&tb, 100_000, digest(), Network::Signet).unwrap();
+    validate_lnurl_invoice(&tb, 100_000, digest(), Network::Testnet).unwrap();
+    for network in [Network::Bitcoin, Network::Regtest] {
+        assert!(validate_lnurl_invoice(&tb, 100_000, digest(), network).is_err());
+    }
+    let signet = invoice_in_currency(Currency::Signet, 100_000, Some(digest()), 10, None);
+    validate_lnurl_invoice(&signet, 100_000, digest(), Network::Signet).unwrap();
+    assert!(validate_lnurl_invoice(&signet, 100_000, digest(), Network::Testnet).is_err());
+    for currency in [Currency::Bitcoin, Currency::Regtest, Currency::Simnet] {
+        let wrong = invoice_in_currency(currency, 100_000, Some(digest()), 11, None);
+        assert!(validate_lnurl_invoice(&wrong, 100_000, digest(), Network::Signet).is_err());
+    }
+}
