@@ -3,6 +3,7 @@ import type { BarkConfigOpts, BarkCreateOpts } from "react-native-nitro-ark";
 import { Platform } from "react-native";
 import { APP_VARIANT } from "~/config";
 import { normalizeEsploraEndpoint } from "~/lib/esploraUrl";
+import { getOwnedSignetRouting } from "./ownedSignetRouting";
 
 export type AppVariant = "mainnet" | "signet" | "regtest";
 export type WalletCreationOptions = Omit<BarkCreateOpts, "mnemonic">;
@@ -70,8 +71,12 @@ export const buildArkUserAgent = (
   version: string,
 ): string => `noah-${appVariant}-${platform}/${version}`;
 
-export const getBaseWalletConfig = (appVariant: AppVariant = APP_VARIANT): BaseWalletConfig =>
-  WALLET_CONFIGS[appVariant];
+export const getBaseWalletConfig = (appVariant: AppVariant = APP_VARIANT): BaseWalletConfig => {
+  const owned = getOwnedSignetRouting(appVariant);
+  return owned
+    ? { regtest: false, signet: true, bitcoin: false, config: owned.wallet }
+    : WALLET_CONFIGS[appVariant];
+};
 
 export const getDefaultEsploraEndpoint = (appVariant: AppVariant = APP_VARIANT): string | null => {
   if (appVariant === "regtest") {
@@ -93,6 +98,10 @@ export const getEffectiveWalletConfig = (
   const walletOptions = getBaseWalletConfig(appVariant);
   const endpoint =
     esploraEndpoint === undefined ? getDefaultEsploraEndpoint(appVariant) : esploraEndpoint;
+  const owned = getOwnedSignetRouting(appVariant);
+  if (owned && endpoint !== (owned.wallet.esplora ?? null)) {
+    throw new Error("An Esplora override differs from the declared owned routing.");
+  }
 
   return {
     ...walletOptions,
@@ -134,6 +143,8 @@ export const getWalletRpcAuth = (appVariant: AppVariant = APP_VARIANT) => {
 };
 
 export const getDefaultBlockheightEndpoint = (appVariant: AppVariant = APP_VARIANT): string => {
+  const owned = getOwnedSignetRouting(appVariant);
+  if (owned) return owned.blockheight_url;
   switch (appVariant) {
     case "mainnet":
       return "https://mempool.second.tech/api/blocks/tip/height";

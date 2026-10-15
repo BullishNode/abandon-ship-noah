@@ -6,6 +6,7 @@ import { Result } from "neverthrow";
 import { Platform } from "react-native";
 import { isGooglePlayServicesAvailable } from "noah-tools";
 import * as Device from "expo-device";
+import { getOwnedSignetRouting } from "./lib/ownedSignetRouting";
 
 const isEmail = (n: string): boolean => /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/.test(n);
 const isOnion = (n: string): boolean => /.onion$/.test(n);
@@ -54,6 +55,8 @@ const getArkDataPath = (): string => {
 export const ARK_DATA_PATH = getArkDataPath();
 
 export const getServerEndpoint = (): string => {
+  const owned = getOwnedSignetRouting(APP_VARIANT);
+  if (owned) return owned.api_url;
   switch (APP_VARIANT) {
     case "regtest":
       return REGTEST_SERVER_URL;
@@ -67,6 +70,8 @@ export const getServerEndpoint = (): string => {
 };
 
 export const getLnurlDomain = (): string => {
+  const owned = getOwnedSignetRouting(APP_VARIANT);
+  if (owned) return owned.lnurl_domain;
   switch (APP_VARIANT) {
     case "regtest":
       return process.env.EXPO_PUBLIC_REGTEST_LNURL_DOMAIN ?? "localhost.com";

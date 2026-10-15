@@ -9,6 +9,7 @@ import {
   validateEsploraGenesisHash,
 } from "~/lib/esploraUrl";
 import { getDefaultBlockheightEndpoint, getDefaultEsploraEndpoint } from "~/lib/walletConfig";
+import { getOwnedSignetRouting } from "./ownedSignetRouting";
 
 const ESPLORA_VALIDATION_TIMEOUT_MS = 5000;
 const ESPLORA_GENESIS_HASHES = {
@@ -16,12 +17,23 @@ const ESPLORA_GENESIS_HASHES = {
   signet: "00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6",
 } as const;
 
-export const getEffectiveEsploraEndpoint = (): string | null =>
-  useEsploraStore.getState().endpointOverride ?? getDefaultEsploraEndpoint();
+export const getEffectiveEsploraEndpoint = (): string | null => {
+  const endpoint = useEsploraStore.getState().endpointOverride ?? getDefaultEsploraEndpoint();
+  const owned = getOwnedSignetRouting(APP_VARIANT);
+  if (owned && endpoint !== (owned.wallet.esplora ?? null)) {
+    throw new Error("A stored Esplora override differs from the declared owned routing.");
+  }
+  return endpoint;
+};
 
 export const getEsploraApiBaseUrl = getEffectiveEsploraEndpoint;
 
 export const getBlockheightEndpoint = (): string => {
+  const owned = getOwnedSignetRouting(APP_VARIANT);
+  if (owned) {
+    getEffectiveEsploraEndpoint();
+    return owned.blockheight_url;
+  }
   const endpointOverride = useEsploraStore.getState().endpointOverride;
   if (APP_VARIANT !== "regtest" && endpointOverride) {
     return getEsploraTipHeightUrl(endpointOverride);

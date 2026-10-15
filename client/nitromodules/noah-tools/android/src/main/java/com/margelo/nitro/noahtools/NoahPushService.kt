@@ -736,13 +736,20 @@ class NoahPushService : PushService() {
         }
 
         return try {
+            val declaredEsplora = variantJson.optNullableString("esplora")
+            val storedEsplora = readEsploraFromStorage(context, appVariant)
+            val routingProfile = variantJson.optString("routingProfile", "")
+            if (routingProfile.isNotEmpty() &&
+                (routingProfile != "track-a-two-step-per-key" || appVariant != "signet" ||
+                    (storedEsplora != null && storedEsplora != declaredEsplora))) {
+                throw IllegalArgumentException("Stored chain routing differs from the owned signet profile")
+            }
             configConstructor.newInstance(
                 variantJson.requireString("ark"),
                 variantJson.requireInt("vtxoRefreshExpiryThreshold"),
                 variantJson.requireLong("fallbackFeeRate"),
                 null,
-                readEsploraFromStorage(context, appVariant)
-                    ?: variantJson.optNullableString("esplora"),
+                storedEsplora ?: declaredEsplora,
                 variantJson.optNullableString("bitcoind"),
                 variantJson.optNullableString("bitcoindCookie"),
                 variantJson.optNullableString("bitcoindUser"),
