@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use bitcoin::hashes::{sha256, Hash};
+use bitcoin::hashes::{Hash, sha256};
 
 use axum::{
     Extension, Json,
@@ -59,10 +59,13 @@ const TIMEOUT: Duration = Duration::from_secs(45);
 fn lnurl_pay_metadata(lightning_address: &str) -> String {
     serde_json::json!([
         ["text/identifier", lightning_address],
-        ["text/plain", format!("Paying satoshis to {}", lightning_address)]
-    ]).to_string()
+        [
+            "text/plain",
+            format!("Paying satoshis to {}", lightning_address)
+        ]
+    ])
+    .to_string()
 }
-
 
 #[derive(Deserialize)]
 pub struct Nip05RequestQuery {
@@ -528,11 +531,19 @@ pub async fn lnurlp_request(
 
     // Generate a unique transaction ID for this payment request
     let transaction_id = Uuid::new_v4().to_string();
-    let network = state.config.network().map_err(|_| ApiError::ServerErr("Invalid server network".to_string()))?;
+    let network = state
+        .config
+        .network()
+        .map_err(|_| ApiError::ServerErr("Invalid server network".to_string()))?;
     let request_owner = pubkey.clone();
-    state.invoice_store.create_request(&transaction_id, InvoiceRequestContext::new(
-        request_owner.clone(), amount, metadata_hash, network,
-    )).await.map_err(|_| ApiError::ServerErr("Could not preserve invoice request".to_string()))?;
+    state
+        .invoice_store
+        .create_request(
+            &transaction_id,
+            InvoiceRequestContext::new(request_owner.clone(), amount, metadata_hash, network),
+        )
+        .await
+        .map_err(|_| ApiError::ServerErr("Could not preserve invoice request".to_string()))?;
 
     if let Some(Extension(event)) = &event {
         event.add_context("transaction_id", &transaction_id);
@@ -566,7 +577,11 @@ pub async fn lnurlp_request(
     let start = std::time::Instant::now();
 
     let invoice = loop {
-        match state.invoice_store.get(&transaction_id, &request_owner).await {
+        match state
+            .invoice_store
+            .get(&transaction_id, &request_owner)
+            .await
+        {
             Ok(Some(inv)) => {
                 break inv;
             }
@@ -589,8 +604,11 @@ pub async fn lnurlp_request(
         }
     };
 
-    validate_lnurl_invoice(&invoice, amount, metadata_hash, network)
-        .map_err(|_| ApiError::InvalidArgument("Device returned an invoice that does not match this LNURL request".to_string()))?;
+    validate_lnurl_invoice(&invoice, amount, metadata_hash, network).map_err(|_| {
+        ApiError::InvalidArgument(
+            "Device returned an invoice that does not match this LNURL request".to_string(),
+        )
+    })?;
 
     let response = LnurlpInvoiceResponse {
         pr: invoice,
@@ -886,7 +904,6 @@ pub async fn verify_email(
     }
 }
 
-
 #[cfg(test)]
 mod lnurl_metadata_controls {
     use super::*;
@@ -894,9 +911,14 @@ mod lnurl_metadata_controls {
     #[test]
     fn lnurl_request_metadata_bytes_match_independent_public_vector() {
         let metadata = lnurl_pay_metadata("alice@example.invalid");
-        assert_eq!(metadata, r#"[["text/identifier","alice@example.invalid"],["text/plain","Paying satoshis to alice@example.invalid"]]"#);
-        assert_eq!(sha256::Hash::hash(metadata.as_bytes()).to_string(),
-            "9d041fb4729e3c19c8716cc6f6143a02ba93dcedfba07e9bf197c2b3dea0b595");
+        assert_eq!(
+            metadata,
+            r#"[["text/identifier","alice@example.invalid"],["text/plain","Paying satoshis to alice@example.invalid"]]"#
+        );
+        assert_eq!(
+            sha256::Hash::hash(metadata.as_bytes()).to_string(),
+            "9d041fb4729e3c19c8716cc6f6143a02ba93dcedfba07e9bf197c2b3dea0b595"
+        );
         assert_ne!(metadata, lnurl_pay_metadata("bob@example.invalid"));
     }
 }
