@@ -11,6 +11,7 @@ import {
   payLightningOffer as payLightningOfferNitro,
   checkLightningPayment as checkLightningPaymentNitro,
   bolt11Invoice as bolt11InvoiceNitro,
+  bolt11InvoiceWithDescriptionHash as bolt11InvoiceWithDescriptionHashNitro,
   type ArkoorPaymentResult,
   type OnchainPaymentResult,
   type LightningPayment,
@@ -151,6 +152,20 @@ export const bolt11Invoice = async (
       new Error(
         `Failed to generate lightning invoice: ${error instanceof Error ? error.message : String(error)}`,
       ),
+  );
+};
+
+export const bolt11InvoiceWithDescriptionHash = async (
+  amountSat: number,
+  descriptionHash: string,
+): Promise<Result<Bolt11Invoice, Error>> => {
+  if (!Number.isSafeInteger(amountSat) || amountSat <= 0 ||
+      typeof descriptionHash !== "string" || !/^[0-9a-fA-F]{64}$/.test(descriptionHash)) {
+    return err(new Error("Invalid LNURL invoice amount or description hash"));
+  }
+  return ResultAsync.fromPromise(
+    bolt11InvoiceWithDescriptionHashNitro(amountSat, descriptionHash),
+    () => new Error("Failed to generate a metadata-bound LNURL invoice"),
   );
 };
 

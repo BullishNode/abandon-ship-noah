@@ -191,6 +191,7 @@ async function handleNotificationData(notificationData: NotificationData) {
       const invoiceResult = await submitInvoiceTask(
         notificationData.transaction_id,
         notificationData.amount,
+        notificationData.description_hash,
       );
       if (invoiceResult.isErr()) {
         throw invoiceResult.error;
