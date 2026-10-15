@@ -12,7 +12,10 @@ fn invoice(network: Network, amount: u64, hash: Option<sha256::Hash>, nonce: u8)
     invoice_at(network, amount, hash, nonce, None)
 }
 fn invoice_at(network: Network, amount: u64, hash: Option<sha256::Hash>, nonce: u8, timestamp: Option<std::time::Duration>) -> String {
-    let builder = InvoiceBuilder::new(Currency::from(network));
+    invoice_in_currency(Currency::from(network), amount, hash, nonce, timestamp)
+}
+fn invoice_in_currency(currency: Currency, amount: u64, hash: Option<sha256::Hash>, nonce: u8, timestamp: Option<std::time::Duration>) -> String {
+    let builder = InvoiceBuilder::new(currency);
     let builder = match hash {
         Some(hash) => builder.description_hash(hash),
         None => builder.description("plain memo is not a metadata hash".to_string()),
@@ -90,11 +93,17 @@ async fn lnurl_request_wrong_hash_amount_network_and_malformed_do_not_consume() 
     let mut conn = connection(&state).await;
     let key = format!("invoice:{id}");
     let before: String = conn.get(&key).await.unwrap();
+    let simnet = invoice_in_currency(Currency::Simnet, 100_000, Some(digest()), 6, None);
+    let parsed: lightning_invoice::Bolt11Invoice = simnet.parse().unwrap();
+    parsed.check_signature().unwrap();
+    assert_eq!(parsed.network(), Network::Regtest);
+    assert_eq!(parsed.currency(), Currency::Simnet);
     for wrong in [
         invoice(Network::Regtest, 100_000, None, 1),
         invoice(Network::Regtest, 100_000, Some(sha256::Hash::hash(b"other metadata")), 2),
         invoice(Network::Regtest, 101_000, Some(digest()), 3),
         invoice(Network::Bitcoin, 100_000, Some(digest()), 4),
+        simnet,
         "not-a-bolt11-invoice".to_string(),
     ] {
         assert_eq!(submit(app.clone(), Some(&token), &id, &wrong).await, StatusCode::BAD_REQUEST);

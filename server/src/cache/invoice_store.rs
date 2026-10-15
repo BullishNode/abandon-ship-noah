@@ -1,7 +1,7 @@
 use anyhow::{Context, ensure};
 use bitcoin::{Network, hashes::{sha256, Hash}};
 use deadpool_redis::redis::cmd;
-use lightning_invoice::{Bolt11Invoice, Bolt11InvoiceDescriptionRef};
+use lightning_invoice::{Bolt11Invoice, Bolt11InvoiceDescriptionRef, Currency};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -66,7 +66,12 @@ pub(crate) fn validate_lnurl_invoice(
     let invoice: Bolt11Invoice = invoice.parse().context("Invalid device BOLT11 invoice")?;
     invoice.check_signature().context("Invalid device invoice signature")?;
     ensure!(!invoice.is_expired(), "Device invoice has expired");
-    ensure!(invoice.network() == network, "Device invoice network mismatch");
+    // network() collapses Simnet into Regtest in lightning-invoice 0.34.
+    // Compare the actual BOLT11 currency so that alias cannot cross this gate.
+    ensure!(matches!((network, invoice.currency()),
+        (Network::Bitcoin, Currency::Bitcoin) | (Network::Testnet, Currency::BitcoinTestnet) |
+        (Network::Signet, Currency::Signet) | (Network::Regtest, Currency::Regtest)),
+        "Device invoice network mismatch");
     ensure!(invoice.amount_milli_satoshis() == Some(amount_msat), "Device invoice amount mismatch");
     ensure!(matches!(invoice.description(), Bolt11InvoiceDescriptionRef::Hash(hash) if hash.0 == metadata_hash),
         "Device invoice does not commit to the advertised LNURL metadata");
