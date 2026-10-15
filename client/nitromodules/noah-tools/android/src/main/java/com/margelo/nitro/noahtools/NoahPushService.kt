@@ -326,6 +326,7 @@ class NoahPushService : PushService() {
     }
 
     private fun ensureWalletLoaded(clazz: Class<*>, instance: Any, context: Context) {
+        requireCNativeIdentity(context)
         synchronized(walletLock) {
             val isLoadedMethod = clazz.getMethod("isWalletLoaded")
             val loaded = isLoadedMethod.invoke(instance) as Boolean
@@ -350,6 +351,7 @@ class NoahPushService : PushService() {
         NoahToolsLogging.performNativeLog("debug", "NoahPushService", "Received message: $messageString")
 
         try {
+            requireCNativeIdentity(this)
             val json = JSONObject(messageString)
             val type = json.optString("notification_type")
             val server = getServerEndpoint(this)
