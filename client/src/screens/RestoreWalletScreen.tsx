@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import { type NativeStackScreenProps } from "@react-navigation/native-stack";
 import { OnboardingStackParamList } from "../Navigators";
-import { useRestoreWallet } from "~/hooks/useWallet";
+import { useRestoreWallet, useRestoreWalletFromServer } from "~/hooks/useWallet";
+import { hasPendingServerRecovery } from "~/lib/walletApi";
 import { NoahSafeAreaView } from "~/components/NoahSafeAreaView";
 import { Text } from "~/components/ui/text";
 import { useWalletStore } from "~/store/walletStore";
@@ -26,16 +27,26 @@ const RestoreWalletScreen = ({ navigation }: Props) => {
     "Fetching and validating backup...": gt("Fetching and validating backup..."),
     "Loading wallet...": gt("Loading wallet..."),
     "Finalizing...": gt("Finalizing..."),
+    "Recovering from Ark server...": gt("Recovering from Ark server..."),
     Complete: gt("Complete"),
   };
   const [mnemonic, setMnemonic] = useState("");
-  const { mutate: restoreWallet, isPending } = useRestoreWallet();
+  const { mutate: restoreWallet, isPending: backupPending } = useRestoreWallet();
+  const { mutate: recoverFromServer, isPending: serverPending } = useRestoreWalletFromServer();
+  const isPending = backupPending || serverPending;
+  const recoveryHeld = hasPendingServerRecovery();
   const restoreProgress = useWalletStore((state) => state.restoreProgress);
 
   const handleRestore = async () => {
-    if (mnemonic) {
+    if (mnemonic && !isPending && !recoveryHeld) {
       const trimmedMnemonic = mnemonic.trim();
       restoreWallet({ mnemonic: trimmedMnemonic });
+    }
+  };
+
+  const handleServerRecovery = () => {
+    if (mnemonic.trim() && !isPending && !recoveryHeld) {
+      recoverFromServer({ mnemonic: mnemonic.trim() });
     }
   };
 
@@ -105,11 +116,26 @@ const RestoreWalletScreen = ({ navigation }: Props) => {
               <NativeNoahButton
                 label={gt("Restore")}
                 onPress={handleRestore}
-                disabled={isPending}
-                isLoading={isPending}
+                disabled={isPending || recoveryHeld}
+                isLoading={backupPending}
                 loadingLabel={gt("Restoring...")}
                 width={168}
               />
+              <View className="h-4" />
+              <NativeNoahButton
+                label={gt("Recover from Ark server")}
+                onPress={handleServerRecovery}
+                disabled={isPending || recoveryHeld || !mnemonic.trim()}
+                isLoading={serverPending}
+                loadingLabel={gt("Recovering...")}
+              />
+              {recoveryHeld && !isPending && (
+                <T>
+                  <Text className="mt-4 text-center text-muted-foreground">
+                    Server recovery is incomplete. Wallet data is preserved; retry is not available yet.
+                  </Text>
+                </T>
+              )}
             </View>
           </ScrollView>
         </TouchableWithoutFeedback>

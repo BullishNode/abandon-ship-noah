@@ -6,6 +6,8 @@ import { Result } from "neverthrow";
 import { Platform } from "react-native";
 import { isGooglePlayServicesAvailable } from "noah-tools";
 import * as Device from "expo-device";
+import { TRACK_C_PROFILE } from "./lib/trackCProfile";
+import { getTrackCSignetProfile } from "./lib/trackCRuntime";
 
 const isEmail = (n: string): boolean => /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/.test(n);
 const isOnion = (n: string): boolean => /.onion$/.test(n);
@@ -25,7 +27,7 @@ export const CACHES_DIRECTORY_PATH = RNFSTurbo.CachesDirectoryPath;
 // Devices that don't have Google Play Services available should use Unified Push
 // Emulators are excluded in this check and only real devices matter.
 export const shouldUseUnifiedPush = () =>
-  PLATFORM === "android" && Device.isDevice && !isGooglePlayServicesAvailable();
+  PLATFORM === "android" && (TRACK_C_PROFILE || (Device.isDevice && !isGooglePlayServicesAvailable()));
 
 // The native UnifiedPush handler can't process recurring payment wake-ups yet,
 // so recurring payments are disabled for those users in this MVP.
@@ -54,6 +56,7 @@ const getArkDataPath = (): string => {
 export const ARK_DATA_PATH = getArkDataPath();
 
 export const getServerEndpoint = (): string => {
+  if (TRACK_C_PROFILE) return getTrackCSignetProfile().server;
   switch (APP_VARIANT) {
     case "regtest":
       return REGTEST_SERVER_URL;
@@ -67,6 +70,7 @@ export const getServerEndpoint = (): string => {
 };
 
 export const getLnurlDomain = (): string => {
+  if (TRACK_C_PROFILE) return getTrackCSignetProfile().lnurlDomain;
   switch (APP_VARIANT) {
     case "regtest":
       return process.env.EXPO_PUBLIC_REGTEST_LNURL_DOMAIN ?? "localhost.com";

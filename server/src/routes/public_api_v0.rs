@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 use std::time::SystemTime;
 
+use bitcoin::hashes::{Hash, sha256};
+
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
@@ -20,6 +22,7 @@ use crate::{
     AppState,
     auth::mint_access_token,
     cache::email_verification_store::EmailVerificationStore,
+    cache::invoice_store::{InvoiceRequestContext, validate_lnurl_invoice},
     db::{
         device_repo::DeviceRepository, fiat_rate_repo::FiatRateRepository,
         mailbox_authorization_repo::MailboxAuthorizationRepository, user_repo::UserRepository,
@@ -52,6 +55,17 @@ const LNURLP_MAX_SENDABLE: u64 = 1000000000;
 const COMMENT_ALLOWED_SIZE: u16 = 280;
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 const TIMEOUT: Duration = Duration::from_secs(45);
+
+fn lnurl_pay_metadata(lightning_address: &str) -> String {
+    serde_json::json!([
+        ["text/identifier", lightning_address],
+        [
+            "text/plain",
+            format!("Paying satoshis to {}", lightning_address)
+        ]
+    ])
+    .to_string()
+}
 
 #[derive(Deserialize)]
 pub struct Nip05RequestQuery {
@@ -390,16 +404,9 @@ pub async fn lnurlp_request(
         ));
     }
 
+    let metadata = lnurl_pay_metadata(&lightning_address);
+    let metadata_hash = sha256::Hash::hash(metadata.as_bytes());
     if query.amount.is_none() {
-        let metadata = serde_json::json!([
-            ["text/identifier", lightning_address],
-            [
-                "text/plain",
-                format!("Paying satoshis to {}", lightning_address)
-            ]
-        ])
-        .to_string();
-
         let response = LnurlpDefaultResponse {
             callback: format!("https://{}/.well-known/lnurlp/{}", lnurl_domain, username),
             min_sendable: LNURLP_MIN_SENDABLE,
@@ -491,6 +498,13 @@ pub async fn lnurlp_request(
         }
     }
 
+    // The device SDK accepts satoshis, so never truncate a fractional request.
+    if amount % 1000 != 0 {
+        return Err(ApiError::InvalidArgument(
+            "Invoice amount must be a whole number of satoshis".to_string(),
+        ));
+    }
+
     if !has_expo_push_token(&state, &pubkey).await? {
         tracing::warn!(
             pubkey = %pubkey,
@@ -517,6 +531,19 @@ pub async fn lnurlp_request(
 
     // Generate a unique transaction ID for this payment request
     let transaction_id = Uuid::new_v4().to_string();
+    let network = state
+        .config
+        .network()
+        .map_err(|_| ApiError::ServerErr("Invalid server network".to_string()))?;
+    let request_owner = pubkey.clone();
+    state
+        .invoice_store
+        .create_request(
+            &transaction_id,
+            InvoiceRequestContext::new(request_owner.clone(), amount, metadata_hash, network),
+        )
+        .await
+        .map_err(|_| ApiError::ServerErr("Could not preserve invoice request".to_string()))?;
 
     if let Some(Extension(event)) = &event {
         event.add_context("transaction_id", &transaction_id);
@@ -533,6 +560,7 @@ pub async fn lnurlp_request(
                 LightningInvoiceRequestNotification {
                     transaction_id: transaction_id_clone,
                     amount,
+                    description_hash: metadata_hash.to_string(),
                 },
             ))
             .unwrap(),
@@ -549,17 +577,12 @@ pub async fn lnurlp_request(
     let start = std::time::Instant::now();
 
     let invoice = loop {
-        match state.invoice_store.get(&transaction_id).await {
+        match state
+            .invoice_store
+            .get(&transaction_id, &request_owner)
+            .await
+        {
             Ok(Some(inv)) => {
-                // Clean up after successful retrieval
-                if let Err(e) = state.invoice_store.remove(&transaction_id).await {
-                    tracing::warn!(
-                        "Failed to remove invoice for transaction_id {}: {}",
-                        transaction_id,
-                        e
-                    );
-                }
-
                 break inv;
             }
             Ok(None) => {
@@ -580,6 +603,12 @@ pub async fn lnurlp_request(
             }
         }
     };
+
+    validate_lnurl_invoice(&invoice, amount, metadata_hash, network).map_err(|_| {
+        ApiError::InvalidArgument(
+            "Device returned an invoice that does not match this LNURL request".to_string(),
+        )
+    })?;
 
     let response = LnurlpInvoiceResponse {
         pr: invoice,
@@ -872,5 +901,24 @@ pub async fn verify_email(
                 "Invalid or expired verification code".to_string(),
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod lnurl_metadata_controls {
+    use super::*;
+
+    #[test]
+    fn lnurl_request_metadata_bytes_match_independent_public_vector() {
+        let metadata = lnurl_pay_metadata("alice@example.invalid");
+        assert_eq!(
+            metadata,
+            r#"[["text/identifier","alice@example.invalid"],["text/plain","Paying satoshis to alice@example.invalid"]]"#
+        );
+        assert_eq!(
+            sha256::Hash::hash(metadata.as_bytes()).to_string(),
+            "9d041fb4729e3c19c8716cc6f6143a02ba93dcedfba07e9bf197c2b3dea0b595"
+        );
+        assert_ne!(metadata, lnurl_pay_metadata("bob@example.invalid"));
     }
 }

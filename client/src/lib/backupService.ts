@@ -27,7 +27,7 @@ import {
   updateBackupSettings,
 } from "./api";
 import { clearMnemonic, getMnemonic, getStoredMnemonic, setMnemonic } from "./crypto";
-import { closeWalletIfLoaded, loadWalletWithMnemonic } from "./walletApi";
+import { closeWalletIfLoaded, loadWalletWithMnemonic, runWalletRestore } from "./walletApi";
 import { useWalletStore } from "~/store/walletStore";
 import { useBackupStore } from "~/store/backupStore";
 import logger from "~/lib/log";
@@ -408,7 +408,7 @@ export class BackupService {
   }
 }
 
-export const restoreWallet = async (mnemonic: string): Promise<Result<void, Error>> => {
+const restoreWalletFromBackup = async (mnemonic: string): Promise<Result<void, Error>> => {
   let restoreOutcome: RestoreOutcome | null = null;
   let previousMnemonic: string | null = null;
   let walletOpened = false;
@@ -557,3 +557,7 @@ export const restoreWallet = async (mnemonic: string): Promise<Result<void, Erro
     useWalletStore.getState().setRestoreProgress(null);
   }
 };
+
+// Share the user-action lease with server recovery; the backup/auth flow above is unchanged.
+export const restoreWallet = (mnemonic: string): Promise<Result<void, Error>> =>
+  runWalletRestore(() => restoreWalletFromBackup(mnemonic));

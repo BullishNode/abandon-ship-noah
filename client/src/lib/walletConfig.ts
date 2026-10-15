@@ -2,6 +2,8 @@ import Constants from "expo-constants";
 import type { BarkConfigOpts, BarkCreateOpts } from "react-native-nitro-ark";
 import { Platform } from "react-native";
 import { APP_VARIANT } from "~/config";
+import { TRACK_C_PROFILE } from "./trackCProfile";
+import { getTrackCSignetProfile } from "./trackCRuntime";
 import { normalizeEsploraEndpoint } from "~/lib/esploraUrl";
 
 export type AppVariant = "mainnet" | "signet" | "regtest";
@@ -70,8 +72,23 @@ export const buildArkUserAgent = (
   version: string,
 ): string => `noah-${appVariant}-${platform}/${version}`;
 
-export const getBaseWalletConfig = (appVariant: AppVariant = APP_VARIANT): BaseWalletConfig =>
-  WALLET_CONFIGS[appVariant];
+export const getBaseWalletConfig = (appVariant: AppVariant = APP_VARIANT): BaseWalletConfig => {
+  if (!TRACK_C_PROFILE) return WALLET_CONFIGS[appVariant];
+  if (appVariant !== "signet") throw new Error("C profile requires Signet");
+  const profile = getTrackCSignetProfile();
+  return {
+    regtest: false, signet: true, bitcoin: false,
+    config: {
+      ark: profile.ark, esplora: "", bitcoind: profile.bitcoind,
+      bitcoind_user: profile.bitcoindUser, bitcoind_pass: profile.bitcoindPass,
+      vtxo_refresh_expiry_threshold: profile.vtxoRefreshExpiryThreshold,
+      fallback_fee_rate: profile.fallbackFeeRate,
+      htlc_recv_claim_delta: profile.htlcRecvClaimDelta,
+      vtxo_exit_margin: profile.vtxoExitMargin,
+      round_tx_required_confirmations: profile.roundTxRequiredConfirmations,
+    },
+  };
+};
 
 export const getDefaultEsploraEndpoint = (appVariant: AppVariant = APP_VARIANT): string | null => {
   if (appVariant === "regtest") {
@@ -91,7 +108,7 @@ export const getEffectiveWalletConfig = (
   appVariant: AppVariant = APP_VARIANT,
 ): WalletCreationOptions => {
   const walletOptions = getBaseWalletConfig(appVariant);
-  const endpoint =
+  const endpoint = TRACK_C_PROFILE ? null :
     esploraEndpoint === undefined ? getDefaultEsploraEndpoint(appVariant) : esploraEndpoint;
 
   return {
@@ -134,6 +151,7 @@ export const getWalletRpcAuth = (appVariant: AppVariant = APP_VARIANT) => {
 };
 
 export const getDefaultBlockheightEndpoint = (appVariant: AppVariant = APP_VARIANT): string => {
+  if (TRACK_C_PROFILE) return getTrackCSignetProfile().bitcoind;
   switch (appVariant) {
     case "mainnet":
       return "https://mempool.second.tech/api/blocks/tip/height";

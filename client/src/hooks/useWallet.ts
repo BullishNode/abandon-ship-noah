@@ -5,6 +5,7 @@ import { useServerStore } from "../store/serverStore";
 import { useWalletStore } from "../store/walletStore";
 import {
   createWallet as createWalletAction,
+  restoreWalletFromServer as restoreWalletFromServerAction,
   fetchOnchainBalance,
   fetchOffchainBalance,
   deleteWallet as deleteWalletAction,
@@ -415,6 +416,22 @@ export function useRestoreWallet() {
     },
     onError: (error: Error) => {
       showAlert({ title: gt("Restore Failed"), description: error.message });
+    },
+  });
+}
+
+export function useRestoreWalletFromServer() {
+  const gt = useGT();
+  const { showAlert } = useAlert();
+
+  return useMutation({
+    mutationFn: async ({ mnemonic }: { mnemonic: string }) => {
+      const result = await restoreWalletFromServerAction(mnemonic);
+      if (result.isErr()) throw result.error;
+    },
+    retry: false,
+    onError: (error: Error) => {
+      showAlert({ title: gt("Server Recovery Incomplete"), description: error.message });
     },
   });
 }

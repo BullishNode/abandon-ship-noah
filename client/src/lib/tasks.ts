@@ -1,6 +1,6 @@
 import { loadWalletIfNeeded, maintenanceDelegated } from "./walletApi";
 import logger from "~/lib/log";
-import { bolt11Invoice, tryClaimAllLightningReceives } from "./paymentsApi";
+import { bolt11InvoiceWithDescriptionHash, tryClaimAllLightningReceives } from "./paymentsApi";
 import { err, ok, Result } from "neverthrow";
 import { flushBackup } from "~/lib/backupCoordinator";
 import { submitInvoice as submitInvoiceApi } from "./api";
@@ -29,7 +29,12 @@ export async function maintenanceTask(): Promise<Result<void, Error>> {
 export async function submitInvoiceTask(
   transaction_id: string,
   amountMsat: number,
+  descriptionHash: string,
 ): Promise<Result<Bolt11Invoice, Error>> {
+  if (!Number.isSafeInteger(amountMsat) || amountMsat <= 0 || amountMsat % 1000 !== 0 ||
+      typeof descriptionHash !== "string" || !/^[0-9a-fA-F]{64}$/.test(descriptionHash)) {
+    return err(new Error("Invalid LNURL invoice request"));
+  }
   const loadResult = await loadWalletIfNeeded();
   if (loadResult.isErr()) {
     log.e("Failed to load wallet for submitting invoice", [loadResult.error]);
@@ -38,7 +43,7 @@ export async function submitInvoiceTask(
 
   const sats = amountMsat / 1000;
 
-  const invoiceResult = await bolt11Invoice(sats);
+  const invoiceResult = await bolt11InvoiceWithDescriptionHash(sats, descriptionHash);
   if (invoiceResult.isErr()) {
     log.e("Failed to create bolt11 invoice", [invoiceResult.error]);
     return err(invoiceResult.error);

@@ -224,7 +224,7 @@ pub async fn revoke_mailbox_authorization(
 /// this endpoint receives it and forwards it to the waiting payer.
 pub async fn submit_invoice(
     State(state): State<AppState>,
-    Extension(_auth_payload): Extension<AuthenticatedUser>,
+    Extension(auth_payload): Extension<AuthenticatedUser>,
     event: Option<Extension<WideEventHandle>>,
     Json(payload): Json<SubmitInvoicePayload>,
 ) -> anyhow::Result<Json<DefaultSuccessPayload>, ApiError> {
@@ -234,11 +234,11 @@ pub async fn submit_invoice(
 
     state
         .invoice_store
-        .store(&payload.transaction_id, &payload.invoice)
+        .assign(&payload.transaction_id, &auth_payload.key, &payload.invoice)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to store invoice in Redis: {}", e);
-            ApiError::ServerErr("Failed to store invoice".to_string())
+            tracing::warn!("Invoice request assignment refused: {}", e);
+            ApiError::InvalidArgument("Invoice assignment unavailable or refused. Retry the identical invoice while this request is active.".to_string())
         })?;
 
     Ok(Json(DefaultSuccessPayload { success: true }))

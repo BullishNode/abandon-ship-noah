@@ -12,6 +12,7 @@ import { getFiatPrices, getHistoricalFiatPrice } from "~/lib/api";
 import { useProfileStore } from "~/store/profileStore";
 import { useEsploraStore } from "~/store/esploraStore";
 import { getWalletRpcAuth } from "~/lib/walletConfig";
+import { TRACK_C_PROFILE } from "~/lib/trackCProfile";
 
 const HISTORICAL_RATE_CACHE_MAX_SIZE = 200;
 type HistoricalRateLookup = {
@@ -57,7 +58,7 @@ export function useBtcToFiatRate() {
 export const getBlockHeight = async (): Promise<Result<number, Error>> => {
   const url = getBlockheightEndpoint();
 
-  if (APP_VARIANT === "regtest") {
+  if (APP_VARIANT === "regtest" || TRACK_C_PROFILE) {
     const auth = getWalletRpcAuth();
 
     return ResultAsync.fromPromise(
@@ -73,8 +74,11 @@ export const getBlockHeight = async (): Promise<Result<number, Error>> => {
           },
         })
         .json<{ result: number }>(),
-      (e) => new Error(`Failed to fetch blockheight from Bitcoin Core: ${e}`),
+      (e) => new Error(TRACK_C_PROFILE ? "Could not fetch blockheight from the configured Bitcoin Core connection" : `Failed to fetch blockheight from Bitcoin Core: ${e}`),
     ).andThen((data) => {
+      if (TRACK_C_PROFILE && (!Number.isSafeInteger(data.result) || data.result < 0)) {
+        return err(new Error("Invalid Bitcoin Core blockheight response"));
+      }
       return ok(data.result);
     });
   }
