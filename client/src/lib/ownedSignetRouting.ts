@@ -22,6 +22,7 @@ export const getOwnedSignetRouting = (variant: string): OwnedSignetRouting | nul
   const routing = declaredRouting as OwnedSignetRouting;
   if (routing.schema !== 1 || routing.profile !== selected || routing.network !== "signet" ||
       !routing.api_url || !routing.lnurl_domain || !routing.blockheight_url || !routing.wallet?.ark ||
+      (routing.wallet.bitcoind && (!routing.wallet.bitcoind_user || !routing.wallet.bitcoind_pass)) ||
       Number(Boolean(routing.wallet.esplora)) + Number(Boolean(routing.wallet.bitcoind)) !== 1) {
     throw new Error("Incomplete owned signet routing; public fallbacks are refused.");
   }

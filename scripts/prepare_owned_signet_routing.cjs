@@ -33,11 +33,29 @@ function prepare(bytes, expectedHash, sdk, nitro, nativeAsset) {
   const chainKey = wallet?.esplora ? "esplora" : "bitcoind";
   const numeric = ["vtxo_refresh_expiry_threshold", "fallback_fee_rate", "htlc_recv_claim_delta",
     "vtxo_exit_margin", "round_tx_required_confirmations"];
-  if (!exactKeys(wallet, ["ark", chainKey, ...numeric]) ||
+  const auth = chainKey === "bitcoind" ? ["bitcoind_user", "bitcoind_pass"] : [];
+  if (!exactKeys(wallet, ["ark", chainKey, ...numeric, ...auth]) ||
+      auth.some((key) => typeof wallet[key] !== "string" || wallet[key].length === 0 ||
+        wallet[key].length > 256 || /[\r\n\0]/.test(wallet[key])) ||
       numeric.some((key) => !Number.isSafeInteger(wallet[key]) || wallet[key] <= 0) ||
       wallet.vtxo_refresh_expiry_threshold !== 12 || wallet.htlc_recv_claim_delta !== 18 ||
       wallet.vtxo_exit_margin !== 12) throw new Error("Wallet routing or security margins differ");
-  url(wallet.ark, false); url(wallet[chainKey]);
+  url(wallet.ark, false);
+  if (chainKey === "esplora") {
+    url(wallet.esplora);
+  } else {
+    // The pinned bitcoincore-rpc simple_http transport is plain TCP even for an
+    // https-labelled URL. Only an independently qualified private HTTP route is supported.
+    const rpc = url(wallet.bitcoind, false);
+    const octets = rpc.hostname.split(".").map(Number);
+    const ipv4 = octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
+    const privateAddress = ipv4 && (octets[0] === 127 || octets[0] === 10 ||
+      (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+      (octets[0] === 192 && octets[1] === 168));
+    if (rpc.protocol !== "http:" || !privateAddress) {
+      throw new Error("Native Core requires a qualified private HTTP route; HTTPS is not native TLS");
+    }
+  }
   const forbidden = ["noahwallet.io", "ark.signet.2nd.dev", "esplora.signet.2nd.dev", "mempool.space", "mempool.second.tech"];
   for (const value of [data.api_url, data.blockheight_url, wallet.ark, wallet[chainKey]]) {
     if (forbidden.some((host) => url(value, false).hostname === host || url(value, false).hostname.endsWith(`.${host}`))) {
@@ -49,7 +67,8 @@ function prepare(bytes, expectedHash, sdk, nitro, nativeAsset) {
   asset.signet = {
     routingProfile: PROFILE,
     ark: wallet.ark, server: data.api_url, esplora: wallet.esplora ?? null,
-    bitcoind: wallet.bitcoind ?? null, bitcoindCookie: null, bitcoindUser: null, bitcoindPass: null,
+    bitcoind: wallet.bitcoind ?? null, bitcoindCookie: null,
+    bitcoindUser: wallet.bitcoind_user ?? null, bitcoindPass: wallet.bitcoind_pass ?? null,
     vtxoRefreshExpiryThreshold: wallet.vtxo_refresh_expiry_threshold,
     fallbackFeeRate: wallet.fallback_fee_rate, htlcRecvClaimDelta: wallet.htlc_recv_claim_delta,
     vtxoExitMargin: wallet.vtxo_exit_margin, roundTxRequiredConfirmations: wallet.round_tx_required_confirmations,
