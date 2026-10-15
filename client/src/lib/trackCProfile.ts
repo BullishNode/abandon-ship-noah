@@ -5,6 +5,9 @@ if (selectedProfile && selectedProfile !== "stock" && selectedProfile !== "track
   throw new Error("Unknown Noah build profile");
 }
 export const TRACK_C_PROFILE = selectedProfile === "track-c";
+if (TRACK_C_PROFILE && process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT !== "unifiedpush") {
+  throw new Error("C Signet requires its declared UnifiedPush transport");
+}
 
 export interface TrackCSignetProfile {
   version: 1;

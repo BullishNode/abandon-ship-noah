@@ -6,7 +6,8 @@ Stock builds keep their existing configuration and application IDs. C Signet use
 files from stock Signet. Shared Java/Kotlin namespace stays`com.noahwallet`;
 getAppVariant still reads Signet from the app BuildConfig, and the push loader
 still recognizes the`.signet` suffix. Build JS and Android together with
-`EXPO_PUBLIC_NOAH_PROFILE=track-c`; retain that exact environment and APK/JS
+`EXPO_PUBLIC_NOAH_PROFILE=track-c` and
+`EXPO_PUBLIC_NOAH_PUSH_TRANSPORT=unifiedpush`; retain that exact environment and APK/JS
 provenance. Unknown selectors refuse. No C iOS build or standalone iOS intent is
 supported; JS C wallet paths refuse on iOS. Do not install a C iOS artifact.
 
@@ -47,3 +48,12 @@ compilation, owned packed Nitro/generated API, full APK link, app-private file
 permission/path agreement, actual endpoint/tunnel/RPC traces and native awake/
 background journeys. Synthetic profile controls are not proof of any of these.
 Run each Bun mock test file in a separate process to avoid module-mock leakage.
+
+C explicitly selects the existing UnifiedPush path on owned Android/emulators.
+It requires an actual owned distributor and endpoint; missing/failed registration
+returns an error with no fallback to Expo/FCM. The Google-services Gradle plugin
+is omitted only for this exact declared C+UnifiedPush pair; stock builds retain
+it. This does not qualify FCM, physical phones or iOS. Existing UnifiedPush does
+not support recurring payment wakeups, so that feature remains unavailable for
+C and its required goal gates remain open. Emulator identity stays truthful;
+this source does not claim a physical device or successful push delivery.

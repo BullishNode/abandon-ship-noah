@@ -1,10 +1,14 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: "com.google.gms.google-services"
+def isTrackCProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-c"
+def isTrackCUnifiedPush = isTrackCProfile && System.getenv("EXPO_PUBLIC_NOAH_PUSH_TRANSPORT") == "unifiedpush"
+if (isTrackCProfile && !isTrackCUnifiedPush) {
+    throw new GradleException("C Signet requires its declared UnifiedPush transport")
+}
+if (!isTrackCUnifiedPush) apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
-def isTrackCProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-c"
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')

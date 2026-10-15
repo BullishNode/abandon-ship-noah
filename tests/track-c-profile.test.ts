@@ -2,7 +2,9 @@
 import { afterAll, expect, mock, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 const previous = process.env.EXPO_PUBLIC_NOAH_PROFILE;
+const previousPush = process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT;
 process.env.EXPO_PUBLIC_NOAH_PROFILE = "track-c";
+process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = "unifiedpush";
 const source = (name: string) => fileURLToPath(new URL(`../client/src/${name}`, import.meta.url));
 const fixture = {
   version: 1, profile: "track-c", network: "signet",
@@ -26,7 +28,8 @@ mock.module("react-native-fs-turbo", () => ({ default: {
 } }));
 const { getTrackCSignetProfile } = await import("../client/src/lib/trackCRuntime");
 const wallet = await import("../client/src/lib/walletConfig");
-afterAll(() => { if (previous === undefined) delete process.env.EXPO_PUBLIC_NOAH_PROFILE; else process.env.EXPO_PUBLIC_NOAH_PROFILE = previous; });
+afterAll(() => { if (previous === undefined) delete process.env.EXPO_PUBLIC_NOAH_PROFILE; else process.env.EXPO_PUBLIC_NOAH_PROFILE = previous;
+  if (previousPush === undefined) delete process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT; else process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = previousPush; });
 
 test("complete private profile is immutable and retains exact Core bindings", () => {
   const parsed = parseTrackCProfile(JSON.stringify(fixture));
@@ -91,4 +94,13 @@ test("changed private bindings refuse within a process and original bindings rem
   raw = JSON.stringify({ ...fixture, server: "https://changed.c-fixture.invalid" });
   expect(() => getTrackCSignetProfile()).toThrow("C Signet configuration is unavailable or invalid");
   raw = JSON.stringify(fixture); expect(getTrackCSignetProfile().server).toBe(fixture.server);
+});
+
+for (const transport of [undefined, "expo"]) test(`C build selection refuses undeclared transport ${String(transport)}`, () => {
+  const env = { ...process.env };
+  if (transport === undefined) delete env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT;
+  else env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = transport;
+  const result = Bun.spawnSync([process.execPath, "-e", `await import(${JSON.stringify(source("lib/trackCProfile.ts"))})`], { env });
+  expect(result.exitCode).not.toBe(0);
+  expect(new TextDecoder().decode(result.stderr)).toContain("C Signet requires its declared UnifiedPush transport");
 });

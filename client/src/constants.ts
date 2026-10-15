@@ -27,7 +27,7 @@ export const CACHES_DIRECTORY_PATH = RNFSTurbo.CachesDirectoryPath;
 // Devices that don't have Google Play Services available should use Unified Push
 // Emulators are excluded in this check and only real devices matter.
 export const shouldUseUnifiedPush = () =>
-  PLATFORM === "android" && Device.isDevice && !isGooglePlayServicesAvailable();
+  PLATFORM === "android" && (TRACK_C_PROFILE || (Device.isDevice && !isGooglePlayServicesAvailable()));
 
 // The native UnifiedPush handler can't process recurring payment wake-ups yet,
 // so recurring payments are disabled for those users in this MVP.
