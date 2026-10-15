@@ -66,3 +66,6 @@ local.properties
 report.html
 .ngrok-domain
 client/maestro-debug-output/
+
+# Locally built native dependency packages; source manifest is tracked.
+/artifacts/*.tgz
