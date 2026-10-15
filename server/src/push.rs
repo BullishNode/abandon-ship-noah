@@ -20,6 +20,53 @@ const UNIFIED_PUSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const UNIFIED_PUSH_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const UNIFIED_PUSH_CONCURRENCY_LIMIT: usize = 16;
 
+// This clone is used only by the isolated integration harness. The test flag
+// changes transport endpoints, not recipient selection, payloads or k1 handling.
+fn integration_test_mode() -> bool {
+    std::env::var("NOAH_INTEGRATION_TEST").as_deref() == Ok("1")
+}
+
+fn loopback_host(host: &str) -> bool {
+    host.trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
+}
+
+fn local_expo_origin(origin: &str) -> Result<Url, ApiError> {
+    let url = Url::parse(origin)
+        .map_err(|_| ApiError::InvalidArgument("Invalid local Expo origin".to_string()))?;
+    if url.scheme() != "http"
+        || !url.host_str().is_some_and(loopback_host)
+        || url.port().is_none_or(|port| port == 0)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(ApiError::InvalidArgument(
+            "Invalid local Expo origin".to_string(),
+        ));
+    }
+    Ok(url)
+}
+
+fn expo_client(access_token: &str) -> Result<Expo, ApiError> {
+    if integration_test_mode() {
+        let origin = std::env::var("NOAH_TEST_EXPO_ORIGIN")
+            .map_err(|_| ApiError::InvalidArgument("Local Expo origin required".to_string()))?;
+        let url = local_expo_origin(&origin)?;
+        return Ok(Expo::new_with_base_url(
+            Some(access_token.to_owned()),
+            url.as_str().trim_end_matches('/'),
+        ));
+    }
+    Ok(Expo::new(ExpoClientOptions {
+        access_token: Some(access_token.to_owned()),
+    }))
+}
+
 #[derive(Debug)]
 struct ResolvedUnifiedPushEndpoint {
     url: Url,
@@ -56,7 +103,10 @@ fn parse_unified_push_endpoint(endpoint: &str) -> Result<(Url, String, u16), ()>
     }
 
     let url = Url::parse(endpoint).map_err(|_| ())?;
-    if url.scheme() != "https" || url.fragment().is_some() {
+    let local_http = integration_test_mode()
+        && url.scheme() == "http"
+        && url.host_str().is_some_and(loopback_host);
+    if (url.scheme() != "https" && !local_http) || url.fragment().is_some() {
         return Err(());
     }
 
@@ -110,7 +160,11 @@ fn validate_resolved_addresses(
     addresses.sort_unstable();
     addresses.dedup();
 
-    if addresses.is_empty() || addresses.iter().any(|address| !is_public_ip(address.ip())) {
+    if addresses.is_empty()
+        || addresses.iter().any(|address| {
+            !is_public_ip(address.ip()) && !(integration_test_mode() && address.ip().is_loopback())
+        })
+    {
         return Err(());
     }
 
@@ -221,9 +275,7 @@ pub async fn send_push_notification_with_unique_k1(
 ) -> anyhow::Result<Vec<PushDispatchReceipt>, ApiError> {
     // For notifications that need unique k1 per device, we don't use the batching approach
     // Instead, we send individual notifications with unique k1 values
-    let expo = Expo::new(ExpoClientOptions {
-        access_token: Some(app_state.config.expo_access_token.clone()),
-    });
+    let expo = expo_client(&app_state.config.expo_access_token)?;
 
     let push_token_repo = PushTokenRepository::new(&app_state.db_pool);
 
@@ -349,9 +401,7 @@ async fn send_push_notification_internal(
     pubkey: Option<String>,
     allow_unified_push: bool,
 ) -> anyhow::Result<(), ApiError> {
-    let expo = Expo::new(ExpoClientOptions {
-        access_token: Some(app_state.config.expo_access_token.clone()),
-    });
+    let expo = expo_client(&app_state.config.expo_access_token)?;
 
     let push_token_repo = PushTokenRepository::new(&app_state.db_pool);
 
@@ -499,6 +549,94 @@ async fn send_unified_notification(endpoint: &str, payload: &str) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_expo_origin_is_literal_loopback_only() {
+        assert!(local_expo_origin("http://127.0.0.1:39123").is_ok());
+        assert!(local_expo_origin("http://[::1]:39123").is_ok());
+        for origin in [
+            "http://localhost:39123",
+            "http://10.0.0.1:39123",
+            "https://127.0.0.1:39123",
+            "http://127.0.0.1",
+            "http://127.0.0.1:0",
+            "http://user@127.0.0.1:39123",
+            "http://127.0.0.1:39123/path",
+            "http://127.0.0.1:39123?key=value",
+            "http://127.0.0.1:39123#fragment",
+        ] {
+            assert!(local_expo_origin(origin).is_err(), "{origin}");
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "isolated harness sets test mode and a reserved loopback origin"]
+    async fn local_push_transports_deliver_real_requests() {
+        use axum::{Json, Router, extract::State, routing::post};
+        use serde_json::{Value, json};
+        use std::sync::{Arc, Mutex};
+
+        assert!(integration_test_mode());
+        let origin = local_expo_origin(&std::env::var("NOAH_TEST_EXPO_ORIGIN").unwrap()).unwrap();
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", origin.port().unwrap()))
+            .await
+            .unwrap();
+        let received = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let app = Router::new()
+            .route("/--/api/v2/push/send", post(|State(received): State<Arc<Mutex<Vec<Value>>>>,
+                Json(body): Json<Value>| async move {
+                received.lock().unwrap().push(body);
+                Json(json!({"data":[{"status":"ok","id":"00000000-0000-4000-8000-000000000001"}]}))
+            }))
+            .route("/phone", post(|State(received): State<Arc<Mutex<Vec<Value>>>>,
+                body: String| async move {
+                received.lock().unwrap().push(serde_json::from_str(&body).unwrap());
+                axum::http::StatusCode::NO_CONTENT
+            }))
+            .route("/redirect", post(|| async {axum::response::Redirect::temporary("/phone")}))
+            .with_state(received.clone());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let payload = json!({"notification_type":"maintenance","round_seq":7});
+        let message = ExpoPushMessage::builder(["ExpoPushToken[local-phone]"])
+            .data(&payload)
+            .unwrap()
+            .build()
+            .unwrap();
+        let tickets = timeout(
+            Duration::from_secs(5),
+            expo_client("local-fixture")
+                .unwrap()
+                .send_push_notifications(message),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(tickets.len(), 1);
+        let destination = format!("{}/phone", origin.as_str().trim_end_matches('/'));
+        validate_push_token(&destination).await.unwrap();
+        send_unified_notification(&destination, &payload.to_string())
+            .await
+            .unwrap();
+        let redirect = format!("{}/redirect", origin.as_str().trim_end_matches('/'));
+        assert!(
+            send_unified_notification(&redirect, &payload.to_string())
+                .await
+                .is_err()
+        );
+        let requests = received.lock().unwrap();
+        assert_eq!(
+            requests.len(),
+            2,
+            "redirect must not dispatch a second phone request"
+        );
+        // The pinned Expo client serializes a one-message chunk as an object.
+        assert_eq!(requests[0]["to"], json!(["ExpoPushToken[local-phone]"]));
+        assert_eq!(requests[0]["data"], payload);
+        assert_eq!(requests[1], payload);
+        drop(requests);
+        server.abort();
+        let _ = server.await;
+    }
 
     #[test]
     fn expo_token_formats_are_preserved() {
