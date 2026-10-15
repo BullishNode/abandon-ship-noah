@@ -2,6 +2,7 @@ import {
   createMnemonic,
   loadWallet as loadWalletNitro,
   createWallet as createWalletNitro,
+  restoreWalletFromArkServer as restoreWalletFromArkServerNitro,
   mailboxAuthorization as mailboxAuthorizationNitro,
   onchainBalance as onchainBalanceNitro,
   offchainBalance as offchainBalanceNitro,
@@ -76,6 +77,92 @@ export interface MailboxAuthorizationResult {
   encoded: string;
 }
 
+const SERVER_RECOVERY_MARKER = `${ARK_DATA_PATH}.server-recovery-pending`;
+const SERVER_RECOVERY_PENDING =
+  "Server recovery is incomplete. Wallet data is preserved; retry is not available yet.";
+let walletRestoreInFlight = false;
+
+// This marker is a hold, never evidence that a wallet or its funds are ready.
+// Keep it outside the native destination, which must remain empty before recovery.
+export const hasPendingServerRecovery = (): boolean => {
+  try {
+    return RNFSTurbo.exists(SERVER_RECOVERY_MARKER);
+  } catch {
+    return true;
+  }
+};
+
+export const runWalletRestore = async (
+  restore: () => Promise<Result<void, Error>>,
+): Promise<Result<void, Error>> => {
+  if (walletCreation || walletRestoreInFlight || hasPendingServerRecovery()) {
+    return err(new Error("A wallet creation or recovery is already pending. Existing data is preserved."));
+  }
+  walletRestoreInFlight = true;
+  try {
+    return await restore();
+  } catch {
+    return err(new Error("Wallet recovery did not complete. Existing data is preserved."));
+  } finally {
+    walletRestoreInFlight = false;
+  }
+};
+
+export const restoreWalletFromServer = (mnemonic: string): Promise<Result<void, Error>> =>
+  runWalletRestore(async () => {
+    const loaded = await ResultAsync.fromPromise(isWalletLoadedNitro(), () =>
+      new Error("Could not check the loaded wallet"),
+    );
+    if (loaded.isErr()) return err(loaded.error);
+    if (loaded.value) return err(new Error("Close the existing wallet before server recovery."));
+    const stored = await getStoredMnemonic();
+    if (stored.isErr()) return err(stored.error);
+    if (stored.value) return err(new Error("Existing wallet identity is preserved. Use its backup restore path."));
+    const empty = Result.fromThrowable(
+      () => !RNFSTurbo.exists(ARK_DATA_PATH) || RNFSTurbo.readdir(ARK_DATA_PATH).length === 0,
+      () => new Error("Could not verify an empty recovery destination"),
+    )();
+    if (empty.isErr()) return err(empty.error);
+    if (!empty.value) return err(new Error("Server recovery requires a new or empty wallet directory."));
+    // The existing pure mnemonic derivation validates the phrase before any
+    // pending state is written. It neither opens a wallet nor signs a payment.
+    const identity = await deriveKeypairFromMnemonic(mnemonic, APP_VARIANT, 0);
+    if (identity.isErr()) return err(new Error("Invalid recovery phrase. Check the words and try again."));
+
+    // Preserve the recovery identity before any native import can occur. Once
+    // admitted, errors never delete the marker, seed association, or native DB.
+    try {
+      await RNFSTurbo.writeFile(SERVER_RECOVERY_MARKER, "Server recovery pending\n", "utf8");
+    } catch {
+      return err(new Error("Could not preserve the recovery operation"));
+    }
+    const saved = await setMnemonic(mnemonic);
+    if (saved.isErr()) return err(new Error(SERVER_RECOVERY_PENDING));
+    useWalletStore.getState().setRestoreProgress({ step: "Recovering from Ark server...", progress: 20 });
+    try {
+      const recovered = await restoreWalletFromArkServerNitro(ARK_DATA_PATH, {
+        ...getEffectiveWalletConfig(getEffectiveEsploraEndpoint()),
+        mnemonic,
+      });
+      if (recovered.status !== "completed" || !recovered.report ||
+          recovered.report.is_complete !== true || recovered.error) {
+        return err(new Error(SERVER_RECOVERY_PENDING));
+      }
+      // C creation already enrolled key zero. This existing read does not
+      // allocate another key or replace the native recovery result.
+      const key = await peakKeyPair(0);
+      if (key.isErr()) return err(new Error(SERVER_RECOVERY_PENDING));
+      if (shouldUseUnifiedPush()) await storeNativeMnemonic(mnemonic);
+      await RNFSTurbo.unlink(SERVER_RECOVERY_MARKER);
+      useWalletStore.setState({ isInitialized: true, isWalletLoaded: true, restoreProgress: null });
+      return ok(undefined);
+    } catch {
+      return err(new Error(SERVER_RECOVERY_PENDING));
+    } finally {
+      useWalletStore.getState().setRestoreProgress(null);
+    }
+  });
+
 const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, Error>> => {
   const isLoadedResult = await ResultAsync.fromPromise(isWalletLoadedNitro(), (e) => e as Error);
   if (isLoadedResult.isErr()) {
@@ -137,6 +224,7 @@ const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, 
 };
 
 const createOrResumeWallet = async (): Promise<Result<void, Error>> => {
+  if (walletRestoreInFlight || hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const mnemonicResult = await getStoredMnemonic();
   if (mnemonicResult.isErr()) {
     return err(mnemonicResult.error);
@@ -216,6 +304,7 @@ export const loadWalletWithMnemonic = async (
   mnemonic: string,
   esploraEndpoint = getEffectiveEsploraEndpoint(),
 ): Promise<Result<boolean, Error>> => {
+  if (hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const loadResult = await ResultAsync.fromPromise(
     loadWalletNitro(ARK_DATA_PATH, {
       mnemonic,
@@ -384,6 +473,7 @@ const loadWalletFromStorage = async (): Promise<Result<boolean, Error>> => {
 };
 
 export const loadWalletIfNeeded = async (): Promise<Result<boolean, Error>> => {
+  if (hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const isWalletSuspended = useWalletStore.getState().isWalletSuspended;
   if (isWalletSuspended) {
     log.d("Wallet is suspended, skipping load");
