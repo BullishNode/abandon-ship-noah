@@ -1,7 +1,12 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: "com.google.gms.google-services"
+def isOwnedASignetProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-a-two-step-per-key"
+def isOwnedAUnifiedPush = isOwnedASignetProfile && System.getenv("EXPO_PUBLIC_NOAH_PUSH_TRANSPORT") == "unifiedpush"
+if (isOwnedASignetProfile && !isOwnedAUnifiedPush) {
+    throw new GradleException("A Signet requires its declared UnifiedPush transport")
+}
+if (!isOwnedAUnifiedPush) apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 

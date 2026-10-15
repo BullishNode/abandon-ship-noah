@@ -462,15 +462,28 @@ class NoahPushService : PushService() {
         server: String?
     ) {
         try {
-            ensureWalletLoaded(clazz, instance, context)
-
-            val amountMsat = json.optLong("amount")
+            val amount = json.opt("amount") as? Number
+                ?: throw IllegalArgumentException("Invalid LNURL invoice amount")
+            val amountValue = amount.toDouble()
+            require(amountValue.isFinite() && amountValue > 0 &&
+                amountValue <= 9007199254740991.0 && kotlin.math.floor(amountValue) == amountValue) {
+                "Invalid LNURL invoice amount"
+            }
+            val amountMsat = amount.toLong()
+            require(amountMsat % 1000L == 0L) { "LNURL invoice requires whole satoshis" }
+            val descriptionHash = json.getString("description_hash")
+            require(Regex("^[0-9a-fA-F]{64}$").matches(descriptionHash)) {
+                "Invalid LNURL description hash"
+            }
             val sats = amountMsat / 1000
             val txId = json.optString("transaction_id")
+            ensureWalletLoaded(clazz, instance, context)
 
-            val bolt11Method = clazz.getMethod("bolt11Invoice", java.lang.Long.TYPE)
-            // JS path converts msat -> sats before calling bolt11Invoice; mirror that here.
-            val invoiceResult = bolt11Method.invoke(instance, sats) ?: return
+            // Explicit JVM signature; Kotlin default arguments are not overloads.
+            val bolt11Method = clazz.getMethod(
+                "bolt11InvoiceWithDescriptionHash", java.lang.Long.TYPE, String::class.java, String::class.java
+            )
+            val invoiceResult = bolt11Method.invoke(instance, sats, descriptionHash, null) ?: return
             val bolt11 =
                 invoiceResult.javaClass.getMethod("getBolt11Invoice").invoke(invoiceResult) as? String
                     ?: return

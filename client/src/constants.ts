@@ -6,7 +6,7 @@ import { Result } from "neverthrow";
 import { Platform } from "react-native";
 import { isGooglePlayServicesAvailable } from "noah-tools";
 import * as Device from "expo-device";
-import { getOwnedSignetRouting } from "./lib/ownedSignetRouting";
+import { getOwnedSignetRouting, OWNED_SIGNET_PROFILE } from "./lib/ownedSignetRouting";
 
 const isEmail = (n: string): boolean => /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/.test(n);
 const isOnion = (n: string): boolean => /.onion$/.test(n);
@@ -24,9 +24,9 @@ export const DOCUMENT_DIRECTORY_PATH = RNFSTurbo.DocumentDirectoryPath;
 export const CACHES_DIRECTORY_PATH = RNFSTurbo.CachesDirectoryPath;
 
 // Devices that don't have Google Play Services available should use Unified Push
-// Emulators are excluded in this check and only real devices matter.
+// Stock emulators remain excluded; the explicit owned profile qualifies its own transport.
 export const shouldUseUnifiedPush = () =>
-  PLATFORM === "android" && Device.isDevice && !isGooglePlayServicesAvailable();
+  PLATFORM === "android" && (OWNED_SIGNET_PROFILE || (Device.isDevice && !isGooglePlayServicesAvailable()));
 
 // The native UnifiedPush handler can't process recurring payment wake-ups yet,
 // so recurring payments are disabled for those users in this MVP.

@@ -69,3 +69,19 @@ The `notification_k1` in maintenance payloads is only a job-correlation identifi
 - Keep `notification_type` strings in sync with `NotificationData::notification_type()` (Rust) and Kotlin handler cases.
 - Never call `tryClaimLightningReceive` on the main/service thread; it is intentionally blocking with `wait=true`.
 - When adding new push types, update both the server enum (`NotificationData`) and the Kotlin handler in `NoahPushService`.
+
+## Isolated A signet builds
+
+The `track-a-two-step-per-key` profile requires
+`EXPO_PUBLIC_NOAH_PUSH_TRANSPORT=unifiedpush` alongside its prepared owned
+routing, Android qualification trust, and native artifact manifests. This exact
+profile omits the Google-services Gradle plugin and never falls back to Expo
+when the UnifiedPush endpoint is unavailable. Stock builds retain their normal
+transport selection. An emulator remains an emulator in permission reports.
+
+An owned distributor and server must be provisioned and their endpoint and
+native delivery independently verified before registration. Profile selection
+and software controls do not establish delivery. The existing UnifiedPush
+handler does not support recurring-payment wakeups; that capability requires
+separate implementation and qualification. Android qualification CA trust does
+not configure Rust HTTPS trust.

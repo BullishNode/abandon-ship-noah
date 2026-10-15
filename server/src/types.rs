@@ -487,6 +487,8 @@ pub struct LightningInvoiceRequestNotification {
     pub transaction_id: String,
     #[ts(type = "number")]
     pub amount: u64,
+    /// SHA-256 of the exact advertised LNURL metadata UTF-8 bytes, in hex.
+    pub description_hash: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS, Clone)]

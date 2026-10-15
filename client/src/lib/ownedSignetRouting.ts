@@ -11,6 +11,11 @@ export type OwnedSignetRouting = {
   wallet: BarkConfigOpts;
 };
 
+export const OWNED_SIGNET_PROFILE = process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-a-two-step-per-key";
+if (OWNED_SIGNET_PROFILE && process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT !== "unifiedpush") {
+  throw new Error("A Signet requires its declared UnifiedPush transport");
+}
+
 // Configuration selects an isolated test destination; it never certifies readiness.
 export const getOwnedSignetRouting = (variant: string): OwnedSignetRouting | null => {
   const selected = process.env.EXPO_PUBLIC_NOAH_PROFILE;
