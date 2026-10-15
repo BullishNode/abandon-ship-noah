@@ -11,6 +11,12 @@ still recognizes the`.signet` suffix. Build JS and Android together with
 provenance. Unknown selectors refuse. No B iOS build or standalone iOS intent is
 supported; JS B wallet paths refuse on iOS. Do not install a B iOS artifact.
 
+OPEN before any app launch: JavaScript currently accepts a missing profile
+selector as stock while the native owned app ID can still be B. The common
+fail-closed native/JavaScript identity guard is not implemented in this snapshot.
+Matching build environment values alone do not close this gap. Both missing and
+mismatched selections must refuse before any endpoint or wallet action.
+
 Before first app launch, the runtime owner must provision exactly one private
 `track-b-signet-profile.json` in the Android app files directory, owned by that
 app UID, regular/non-symlink and mode0600. Native Android validates these file
@@ -28,8 +34,9 @@ rejected. The Core URL must be HTTP literal127.0.0.1 or[::1] with an explicit po
 and an actual privately provisioned restricted gateway username/password.
 
 The declared SDK's synchronous Core client uses raw TCP even for an HTTPS URL.
-Consequently B uses root-owned authenticated restricted gateway transport over
-SSH and adb reverse to app-loopback; it does not claim synchronous Core TLS.
+A root-owned authenticated restricted gateway over SSH and adb reverse to
+app-loopback is the planned existing-component route. It is REQUIRED and has NOT
+been provisioned or qualified for B. Synchronous Core TLS is not claimed.
 The gateway, SSH tunnel/reverse, owned Ark/backend/LNURL, RPC method restriction,
 Core txindex/network, actual credentials and matching endpoint ownership must be
 independently verified before first app open. No gateway credentials, real host

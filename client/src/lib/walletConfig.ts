@@ -74,7 +74,7 @@ export const buildArkUserAgent = (
 
 export const getBaseWalletConfig = (appVariant: AppVariant = APP_VARIANT): BaseWalletConfig => {
   if (!TRACK_B_PROFILE) return WALLET_CONFIGS[appVariant];
-  if (appVariant !== "signet") throw new Error("C profile requires Signet");
+  if (appVariant !== "signet") throw new Error("B profile requires Signet");
   const profile = getTrackBSignetProfile();
   return {
     regtest: false,
