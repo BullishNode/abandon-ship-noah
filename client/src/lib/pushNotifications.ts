@@ -438,7 +438,7 @@ export async function registerForPushNotificationsAsync(): Promise<
 > {
   await ensureDefaultNotificationChannel();
 
-  // C explicitly qualifies the existing UnifiedPush route on its owned emulator.
+  // B selects the existing UnifiedPush route on its owned emulator; runtime qualification is separate.
   if (!Device.isDevice && !TRACK_B_PROFILE) {
     return ok({ kind: "device_not_supported" });
   }

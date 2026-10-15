@@ -775,9 +775,9 @@ class NoahPushService : PushService() {
         }
     }
 
-    private var pinnedCProfile: String? = null
+    private var pinnedBProfile: String? = null
 
-    private fun validateCProfile(config: JSONObject) {
+    private fun validateBProfile(config: JSONObject) {
         val fields = setOf("version", "profile", "network", "ark", "server", "lnurlDomain", "bitcoind",
             "bitcoindUser", "bitcoindPass", "vtxoRefreshExpiryThreshold", "fallbackFeeRate",
             "htlcRecvClaimDelta", "vtxoExitMargin", "roundTxRequiredConfirmations")
@@ -825,10 +825,10 @@ class NoahPushService : PushService() {
                 require(android.system.OsConstants.S_ISREG(stat.st_mode) && stat.st_uid == android.os.Process.myUid() && (stat.st_mode and 511) == 384)
                 require(file.length() in 1L..8192L)
                 val raw = file.readText(Charsets.UTF_8)
-                require(pinnedCProfile == null || pinnedCProfile == raw)
+                require(pinnedBProfile == null || pinnedBProfile == raw)
                 val config = JSONObject(raw)
-                validateCProfile(config)
-                pinnedCProfile = raw
+                validateBProfile(config)
+                pinnedBProfile = raw
                 return JSONObject().put("signet", config)
             }
             context.assets.open("noah_bark_config.json").use { input ->
