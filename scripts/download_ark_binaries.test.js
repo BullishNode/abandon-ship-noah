@@ -104,3 +104,54 @@ test("extra unreviewed package source is refused", (t) => {
   const f = fixture(t); fs.writeFileSync(path.join(f.root, "node_modules/react-native-nitro-ark/extra.js"), "unexpected");
   assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /source file set/); f.preserved();
 });
+
+// A genuine boundary check: production installer may not read a whole JNI archive.
+test("JNI validation and staged verification use incremental reads", (t) => {
+  const f = fixture(t);
+  const original = fs.readFileSync;
+  fs.readFileSync = function(filename, ...options) {
+    assert.equal(typeof filename === "string" && filename.endsWith(".a"), false,
+      "whole archive read attempted");
+    return original.call(this, filename, ...options);
+  };
+  try { installOwnedAndroid(f.root, f.manifestPath); }
+  finally { fs.readFileSync = original; }
+  assert.equal(fs.existsSync(path.join(f.destination, "old-payload")), false);
+});
+
+test("incremental digest covers bytes beyond the first chunk", (t) => {
+  const f = fixture(t);
+  const entry = f.manifest.files[0];
+  const filename = path.join(f.root, "jniLibs", entry.path);
+  const bytes = Buffer.alloc(2 * 1024 * 1024 + 7, 42);
+  fs.writeFileSync(filename, bytes);
+  entry.bytes = bytes.length; entry.sha256 = sha(bytes); f.write();
+  const fd = fs.openSync(filename, "r+");
+  try { fs.writeSync(fd, Buffer.from([43]), 0, 1, bytes.length - 1); }
+  finally { fs.closeSync(fd); }
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /Artifact digest differs/);
+  f.preserved();
+});
+
+// Explicit opt-in ONLY on the owned qualification VM; not an ABI/product claim.
+const resourceBytes = Number(process.env.NOAH_INSTALLER_RESOURCE_BYTES || 0);
+test("large sparse JNI staging keeps resource use bounded", {
+  skip: resourceBytes === 0,
+  timeout: 300_000,
+}, async (t) => {
+  assert.ok(Number.isSafeInteger(resourceBytes) && resourceBytes >= 1024 * 1024 && resourceBytes <= 2 * 1024 ** 3);
+  const f = fixture(t);
+  const entry = f.manifest.files[0];
+  const filename = path.join(f.root, "jniLibs", entry.path);
+  fs.truncateSync(filename, resourceBytes);
+  const hash = crypto.createHash("sha256");
+  for await (const chunk of fs.createReadStream(filename)) hash.update(chunk);
+  entry.bytes = resourceBytes; entry.sha256 = hash.digest("hex"); f.write();
+  installOwnedAndroid(f.root, f.manifestPath);
+  assert.equal(fs.statSync(path.join(f.destination, entry.path)).size, resourceBytes);
+  assert.equal(fs.existsSync(path.join(f.destination, "old-payload")), false);
+  // Absolute per-process highwater; run this selector alone for an honest peak.
+  const peakKiB = process.resourceUsage().maxRSS;
+  assert.ok(peakKiB < 256 * 1024, `installer peak exceeded256MiB: ${peakKiB}KiB`);
+  process.stdout.write(JSON.stringify({ synthetic_resource_bytes: resourceBytes, maxRSS_KiB: peakKiB, scope: "streaming installer staging only; no ABI/APK/device credit" }) + "\n");
+});

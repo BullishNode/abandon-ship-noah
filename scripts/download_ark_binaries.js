@@ -8,6 +8,19 @@ const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64"];
 const LIBRARIES = ["libbark_cpp.a", "libcxxbridge1.a"];
 const EXPECTED_FILES = ABIS.flatMap((abi) => LIBRARIES.map((lib) => `${abi}/${lib}`)).sort();
 const digest = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+// JNI archives can exceed1GiB. Hash fixed-size chunks, never a whole archive Buffer.
+function fileDigest(filename) {
+  const fd = fs.openSync(filename, "r");
+  try {
+    const hash = crypto.createHash("sha256");
+    const chunk = Buffer.allocUnsafe(1024 * 1024);
+    let read;
+    while ((read = fs.readSync(fd, chunk, 0, chunk.length, null)) !== 0) {
+      hash.update(chunk.subarray(0, read));
+    }
+    return hash.digest("hex");
+  } finally { fs.closeSync(fd); }
+}
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -85,7 +98,7 @@ function installOwnedAndroid(projectRoot, manifestPath) {
     check(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0 && /^[0-9a-f]{64}$/.test(entry.sha256),
       "Invalid package source digest or size");
     const filename = path.join(packageDirectory, entry.path);
-    check(regularFile(filename).size === entry.bytes && digest(fs.readFileSync(filename)) === entry.sha256,
+    check(regularFile(filename).size === entry.bytes && fileDigest(filename) === entry.sha256,
       "Installed packed source bytes differ");
   }
   const actualPaths = manifest.files.map((entry) => entry.path).sort();
@@ -100,7 +113,7 @@ function installOwnedAndroid(projectRoot, manifestPath) {
     const parent = fs.lstatSync(path.dirname(filename));
     check(parent.isDirectory() && !parent.isSymbolicLink(), "Artifact ABI directory must be real");
     check(regularFile(filename).size === entry.bytes, "Artifact byte count differs");
-    check(digest(fs.readFileSync(filename)) === entry.sha256, "Artifact digest differs");
+    check(fileDigest(filename) === entry.sha256, "Artifact digest differs");
   }
   // All identities and source bytes are validated before touching the current payload.
   const parent = path.join(packageDirectory, "android/src/main");
@@ -119,8 +132,7 @@ function installOwnedAndroid(projectRoot, manifestPath) {
     for (const entry of manifest.files) {
       const target = path.join(staging, entry.path);
       fs.copyFileSync(path.join(sourceRoot, entry.path), target, fs.constants.COPYFILE_EXCL);
-      const copied = fs.readFileSync(target);
-      check(copied.length === entry.bytes && digest(copied) === entry.sha256, "Staged artifact changed during copy");
+      check(regularFile(target).size === entry.bytes && fileDigest(target) === entry.sha256, "Staged artifact changed during copy");
       const fd = fs.openSync(target, "r");
       try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     }
