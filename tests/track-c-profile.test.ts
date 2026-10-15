@@ -14,6 +14,7 @@ const fixture = {
   vtxoRefreshExpiryThreshold: 48, fallbackFeeRate: 10000, htlcRecvClaimDelta: 18,
   vtxoExitMargin: 12, roundTxRequiredConfirmations: 1,
 };
+mock.module("expo-application", () => ({ applicationId: "com.noahwallet.trackc.signet" }));
 const { parseTrackCProfile } = await import("../client/src/lib/trackCProfile");
 let platform = "android";
 const appVariant = "signet";
@@ -99,7 +100,7 @@ for (const transport of [undefined, "expo"]) test(`C build selection refuses und
   const env = { ...process.env };
   if (transport === undefined) delete env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT;
   else env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = transport;
-  const result = Bun.spawnSync([process.execPath, "-e", `await import(${JSON.stringify(source("lib/trackCProfile.ts"))})`], { env });
+  const result = Bun.spawnSync([process.execPath, "-e", `const { mock } = await import("bun:test"); mock.module("expo-application", () => ({ applicationId: "com.noahwallet.trackc.signet" })); await import(${JSON.stringify(source("lib/trackCProfile.ts"))})`], { env });
   expect(result.exitCode).not.toBe(0);
   expect(new TextDecoder().decode(result.stderr)).toContain("C Signet requires its declared UnifiedPush transport");
 });

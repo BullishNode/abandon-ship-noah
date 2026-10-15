@@ -12,6 +12,7 @@ afterAll(() => {
   if (previousPush === undefined) delete process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT; else process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = previousPush;
 });
 const read = mock(() => { throw new Error("Filesystem must not be read for non-Signet"); });
+mock.module("expo-application", () => ({ applicationId: "com.noahwallet.trackc.signet" }));
 mock.module("react-native", () => ({ Platform: { OS: "android" } }));
 mock.module(source("config.ts"), () => ({ APP_VARIANT: "mainnet" }));
 mock.module("react-native-fs-turbo", () => ({ default: {

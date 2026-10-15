@@ -1,3 +1,5 @@
+import { applicationId } from "expo-application";
+
 // Public profile selection; credentials come only from the privately provisioned
 // app file. This selector is not financial readiness or proof of endpoint ownership.
 const selectedProfile = process.env.EXPO_PUBLIC_NOAH_PROFILE;
@@ -5,6 +7,10 @@ if (selectedProfile && selectedProfile !== "stock" && selectedProfile !== "track
   throw new Error("Unknown Noah build profile");
 }
 export const TRACK_C_PROFILE = selectedProfile === "track-c";
+// This value comes from the installed native package, not Expo/Metro environment.
+if ((applicationId === "com.noahwallet.trackc.signet") !== TRACK_C_PROFILE) {
+  throw new Error("Noah native application and JavaScript profile do not match");
+}
 if (TRACK_C_PROFILE && process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT !== "unifiedpush") {
   throw new Error("C Signet requires its declared UnifiedPush transport");
 }
