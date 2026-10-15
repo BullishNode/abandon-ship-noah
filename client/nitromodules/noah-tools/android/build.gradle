@@ -15,6 +15,11 @@ buildscript {
   }
 }
 
+def noahProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") ?: "stock"
+if (!(noahProfile in ["stock", "track-c"])) {
+  throw new GradleException("Unknown Noah build profile")
+}
+
 def reactNativeArchitectures() {
   def value = rootProject.getProperties().get("reactNativeArchitectures")
   return value ? value.split(",") : ["x86_64", "arm64-v8a"]
@@ -36,6 +41,7 @@ android {
   compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
 
   defaultConfig {
+    buildConfigField "boolean", "TRACK_C_SIGNET_PROFILE", (noahProfile == "track-c" ? "true" : "false")
     minSdkVersion getExtOrIntegerDefault("minSdkVersion")
     targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
 

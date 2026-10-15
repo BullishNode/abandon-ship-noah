@@ -69,6 +69,13 @@ import {
   getWalletRefreshExpiryThreshold,
 } from "~/lib/walletConfig";
 
+import { TRACK_C_PROFILE } from "./trackCProfile";
+import { getTrackCSignetProfile } from "./trackCRuntime";
+const preflightCProfile = () => Result.fromThrowable(
+  () => { if (TRACK_C_PROFILE) getTrackCSignetProfile(); },
+  () => new Error("C Signet configuration is unavailable or invalid"),
+)();
+
 const log = logger("walletApi");
 
 export interface MailboxAuthorizationResult {
@@ -110,6 +117,8 @@ export const runWalletRestore = async (
 
 export const restoreWalletFromServer = (mnemonic: string): Promise<Result<void, Error>> =>
   runWalletRestore(async () => {
+    const profile = preflightCProfile();
+    if (profile.isErr()) return err(profile.error);
     const loaded = await ResultAsync.fromPromise(isWalletLoadedNitro(), () =>
       new Error("Could not check the loaded wallet"),
     );
@@ -224,6 +233,8 @@ const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, 
 };
 
 const createOrResumeWallet = async (): Promise<Result<void, Error>> => {
+  const profile = preflightCProfile();
+  if (profile.isErr()) return err(profile.error);
   if (walletRestoreInFlight || hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const mnemonicResult = await getStoredMnemonic();
   if (mnemonicResult.isErr()) {
@@ -304,6 +315,8 @@ export const loadWalletWithMnemonic = async (
   mnemonic: string,
   esploraEndpoint = getEffectiveEsploraEndpoint(),
 ): Promise<Result<boolean, Error>> => {
+  const profile = preflightCProfile();
+  if (profile.isErr()) return err(profile.error);
   if (hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const loadResult = await ResultAsync.fromPromise(
     loadWalletNitro(ARK_DATA_PATH, {
@@ -473,6 +486,8 @@ const loadWalletFromStorage = async (): Promise<Result<boolean, Error>> => {
 };
 
 export const loadWalletIfNeeded = async (): Promise<Result<boolean, Error>> => {
+  const profile = preflightCProfile();
+  if (profile.isErr()) return err(profile.error);
   if (hasPendingServerRecovery()) return err(new Error(SERVER_RECOVERY_PENDING));
   const isWalletSuspended = useWalletStore.getState().isWalletSuspended;
   if (isWalletSuspended) {

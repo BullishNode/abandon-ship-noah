@@ -70,6 +70,8 @@ mock.module(source("constants.ts"), () => ({
   DOCUMENT_DIRECTORY_PATH: "/public-fixture", shouldUseUnifiedPush: () => false,
 }));
 mock.module(source("config.ts"), () => ({ APP_VARIANT: "regtest" }));
+mock.module(source("lib/trackCProfile.ts"), () => ({ TRACK_C_PROFILE: false }));
+mock.module(source("lib/trackCRuntime.ts"), () => ({ getTrackCSignetProfile: forbidden }));
 mock.module(source("lib/crypto.ts"), () => ({
   getStoredMnemonic: async () => ok(stored), getMnemonic: async () => ok(stored),
   setMnemonic: async (phrase: string) => {

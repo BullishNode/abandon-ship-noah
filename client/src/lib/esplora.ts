@@ -1,6 +1,7 @@
 import ky from "ky";
 import { err, ok, ResultAsync, type Result } from "neverthrow";
 import { APP_VARIANT } from "~/config";
+import { TRACK_C_PROFILE } from "./trackCProfile";
 import { useEsploraStore } from "~/store/esploraStore";
 import {
   getEsploraGenesisHashUrl,
@@ -17,11 +18,12 @@ const ESPLORA_GENESIS_HASHES = {
 } as const;
 
 export const getEffectiveEsploraEndpoint = (): string | null =>
-  useEsploraStore.getState().endpointOverride ?? getDefaultEsploraEndpoint();
+  TRACK_C_PROFILE ? null : useEsploraStore.getState().endpointOverride ?? getDefaultEsploraEndpoint();
 
 export const getEsploraApiBaseUrl = getEffectiveEsploraEndpoint;
 
 export const getBlockheightEndpoint = (): string => {
+  if (TRACK_C_PROFILE) return getDefaultBlockheightEndpoint();
   const endpointOverride = useEsploraStore.getState().endpointOverride;
   if (APP_VARIANT !== "regtest" && endpointOverride) {
     return getEsploraTipHeightUrl(endpointOverride);
@@ -31,6 +33,7 @@ export const getBlockheightEndpoint = (): string => {
 };
 
 export const validateEsploraEndpoint = async (value: string): Promise<Result<string, Error>> => {
+  if (TRACK_C_PROFILE) return err(new Error("This profile uses its configured Bitcoin Core connection."));
   const normalizedResult = normalizeEsploraEndpoint(value);
   if (normalizedResult.isErr()) {
     return err(normalizedResult.error);
