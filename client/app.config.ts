@@ -127,7 +127,8 @@ const config: { expo: ExpoConfig } = {
           "./assets/All_Files/android/Android_Adaptive/android_adaptive_foreground.png",
         backgroundColor: "#000000",
       },
-      package: "com.noahwallet",
+      package: process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-c"
+        ? "com.noahwallet.trackc.signet" : "com.noahwallet",
       softwareKeyboardLayoutMode: "pan",
     },
     androidStatusBar: {

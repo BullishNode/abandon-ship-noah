@@ -1,7 +1,11 @@
 # C Signet runtime profile (WIP, Android only)
 
 This is a new opt-in source profile, not a deployed or financially qualified app.
-Stock builds keep their existing configuration. Build JS and Android together with
+Stock builds keep their existing configuration and application IDs. C Signet uses
+`com.noahwallet.trackc.signet`, with a separate Android UID, keystore and private
+files from stock Signet. Shared Java/Kotlin namespace stays`com.noahwallet`;
+getAppVariant still reads Signet from the app BuildConfig, and the push loader
+still recognizes the`.signet` suffix. Build JS and Android together with
 `EXPO_PUBLIC_NOAH_PROFILE=track-c`; retain that exact environment and APK/JS
 provenance. Unknown selectors refuse. No C iOS build or standalone iOS intent is
 supported; JS C wallet paths refuse on iOS. Do not install a C iOS artifact.

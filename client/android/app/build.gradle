@@ -4,6 +4,7 @@ apply plugin: "com.facebook.react"
 apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def isTrackCProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-c"
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
@@ -143,7 +144,7 @@ android {
     productFlavors {
         signet {
             dimension 'version'
-            applicationId 'com.noahwallet.signet'
+            applicationId (isTrackCProfile ? 'com.noahwallet.trackc.signet' : 'com.noahwallet.signet')
             versionNameSuffix "-signet"
             resValue "string", "app_name", "Noah (Signet)"
             buildConfigField "String", "APP_VARIANT", '"signet"'

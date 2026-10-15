@@ -10,7 +10,8 @@ const path = require("path");
 // - widget/provider files stay in the stable checked-in paths
 const BASE_PACKAGE = "com.noahwallet";
 const MAINNET_APPLICATION_ID = "com.noahwallet.mainnet";
-const SIGNET_APPLICATION_ID = "com.noahwallet.signet";
+const SIGNET_APPLICATION_ID = process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-c"
+  ? "com.noahwallet.trackc.signet" : "com.noahwallet.signet";
 const REGTEST_APPLICATION_ID = "com.noahwallet.regtest";
 
 const SOURCE_FILES = [
@@ -136,7 +137,10 @@ function normalizeSourceTree(androidRoot) {
     fs.mkdirSync(targetDir, { recursive: true });
 
     const sourceContents = fs.readFileSync(sourcePath, "utf8");
-    const rewrittenContents = rewriteSourceFileContents(sourceContents, file.replacements);
+    const normalizedContents = process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-c"
+      ? sourceContents.replaceAll("com.noahwallet.trackc.signet", BASE_PACKAGE)
+      : sourceContents;
+    const rewrittenContents = rewriteSourceFileContents(normalizedContents, file.replacements);
     fs.writeFileSync(targetPath, rewrittenContents, "utf8");
 
     if (sourcePath !== targetPath && fs.existsSync(sourcePath)) {
