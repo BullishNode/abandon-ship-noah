@@ -211,4 +211,13 @@ async function main() {
   }
 }
 
-main();
+if (process.env.NOAH_ARK_PROFILE === "track-a-two-step-per-key") {
+  // The A build stages its admitted native outputs before this check. Never
+  // replace those bytes with stock release libraries, or contact a download URL.
+  const { verifyArkNativeArtifacts } = require("./verify_ark_native_artifacts");
+  console.log(JSON.stringify(verifyArkNativeArtifacts(nitroArkPath)));
+} else if (process.env.NOAH_ARK_PROFILE) {
+  throw new Error("Unknown native Ark profile");
+} else {
+  main();
+}
