@@ -65,6 +65,7 @@ pub(crate) fn validate_lnurl_invoice(
 ) -> anyhow::Result<()> {
     let invoice: Bolt11Invoice = invoice.parse().context("Invalid device BOLT11 invoice")?;
     invoice.check_signature().context("Invalid device invoice signature")?;
+    ensure!(!invoice.is_expired(), "Device invoice has expired");
     ensure!(invoice.network() == network, "Device invoice network mismatch");
     ensure!(invoice.amount_milli_satoshis() == Some(amount_msat), "Device invoice amount mismatch");
     ensure!(matches!(invoice.description(), Bolt11InvoiceDescriptionRef::Hash(hash) if hash.0 == metadata_hash),

@@ -9,13 +9,20 @@ use crate::tests::common::{TestUser, setup_test_app};
 
 fn digest() -> sha256::Hash { sha256::Hash::hash(b"public LNURL metadata fixture") }
 fn invoice(network: Network, amount: u64, hash: Option<sha256::Hash>, nonce: u8) -> String {
+    invoice_at(network, amount, hash, nonce, None)
+}
+fn invoice_at(network: Network, amount: u64, hash: Option<sha256::Hash>, nonce: u8, timestamp: Option<std::time::Duration>) -> String {
     let builder = InvoiceBuilder::new(Currency::from(network));
     let builder = match hash {
         Some(hash) => builder.description_hash(hash),
         None => builder.description("plain memo is not a metadata hash".to_string()),
     };
+    let builder = match timestamp {
+        Some(timestamp) => builder.duration_since_epoch(timestamp),
+        None => builder.current_timestamp(),
+    };
     builder.payment_hash(sha256::Hash::from_byte_array([nonce; 32]))
-        .payment_secret(PaymentSecret([2; 32])).current_timestamp()
+        .payment_secret(PaymentSecret([2; 32]))
         .min_final_cltv_expiry_delta(18).amount_milli_satoshis(amount)
         .build_signed(|hash| Secp256k1::new().sign_ecdsa_recoverable(hash, &SecretKey::from_slice(&[3; 32]).unwrap()))
         .unwrap().to_string()
@@ -158,4 +165,42 @@ async fn lnurl_request_requires_authenticated_existing_user() {
     let id = uuid::Uuid::new_v4().to_string();
     assert_eq!(submit(app.clone(), None, &id, "public invalid invoice").await, StatusCode::UNAUTHORIZED);
     assert_eq!(submit(app, Some(&token), &id, "public invalid invoice").await, StatusCode::UNAUTHORIZED);
+}
+
+
+#[tokio::test]
+async fn lnurl_request_signet_signed_invoice_and_expiry_are_distinct_from_request_ttl() {
+    use crate::cache::invoice_store::validate_lnurl_invoice;
+    use lightning_invoice::Bolt11Invoice;
+    let (app, state, _guard) = setup_test_app().await;
+    let (a, token) = user(&state).await;
+    let owner = a.pubkey().to_string();
+    let id = uuid::Uuid::new_v4().to_string();
+    state.invoice_store.create_request(&id, InvoiceRequestContext::new(
+        owner.clone(), 100_000, digest(), Network::Signet,
+    )).await.unwrap();
+    let valid = invoice(Network::Signet, 100_000, Some(digest()), 1);
+    let parsed: Bolt11Invoice = valid.parse().unwrap();
+    assert_eq!(parsed.currency(), Currency::Signet);
+    assert_eq!(parsed.network(), Network::Signet);
+    assert!(valid.starts_with("lntbs"));
+    assert!(!parsed.is_expired());
+    validate_lnurl_invoice(&valid, 100_000, digest(), Network::Signet).unwrap();
+    assert!(validate_lnurl_invoice(&valid, 100_000, digest(), Network::Testnet).is_err());
+    let expired = invoice_at(Network::Signet, 100_000, Some(digest()), 2,
+        Some(std::time::Duration::from_secs(1_700_000_000)));
+    let parsed: Bolt11Invoice = expired.parse().unwrap();
+    parsed.check_signature().unwrap();
+    assert!(parsed.is_expired());
+    let error = validate_lnurl_invoice(&expired, 100_000, digest(), Network::Signet).unwrap_err();
+    assert!(error.to_string().contains("has expired"));
+    let mut conn = connection(&state).await;
+    let key = format!("invoice:{id}");
+    let before: String = conn.get(&key).await.unwrap();
+    assert!(conn.pttl::<_, i64>(&key).await.unwrap() > 0);
+    assert_eq!(submit(app.clone(), Some(&token), &id, &expired).await, StatusCode::BAD_REQUEST);
+    assert_eq!(conn.get::<_, String>(&key).await.unwrap(), before);
+    assert_eq!(state.invoice_store.get(&id, &owner).await.unwrap(), None);
+    assert_eq!(submit(app, Some(&token), &id, &valid).await, StatusCode::OK);
+    assert_eq!(state.invoice_store.get(&id, &owner).await.unwrap(), Some(valid));
 }
