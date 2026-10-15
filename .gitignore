@@ -66,3 +66,7 @@ local.properties
 report.html
 .ngrok-domain
 client/maestro-debug-output/
+
+# Owned local Android qualification inputs; never publish payloads or invent release URLs
+/native-ark-package.tgz
+/native-ark-artifacts.json

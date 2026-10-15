@@ -155,3 +155,55 @@ test("large sparse JNI staging keeps resource use bounded", {
   assert.ok(peakKiB < 256 * 1024, `installer peak exceeded256MiB: ${peakKiB}KiB`);
   process.stdout.write(JSON.stringify({ synthetic_resource_bytes: resourceBytes, maxRSS_KiB: peakKiB, scope: "streaming installer staging only; no ABI/APK/device credit" }) + "\n");
 });
+
+function localDelivery(f) {
+  f.manifest.nitro_commit = "a815576182ebebc9db1120a6a629e9c4c1674a5e";
+  f.manifest.package_tarball = {
+    path: "native-ark-package.tgz", bytes: 492171204,
+    sha256: "b39e17850ae6af7c44cde4d952b280fa23f378529071aff68fe61a2da700c8d5",
+  };
+  fs.writeFileSync(path.join(f.root, "client/package.json"), JSON.stringify({ dependencies: {
+    "react-native-nitro-ark": "file:../native-ark-package.tgz",
+  } }));
+  f.write();
+}
+test("local qualification cannot substitute a wrong tarball pin or source", (t) => {
+  const f = fixture(t); localDelivery(f);
+  f.manifest.package_tarball.sha256 = "0".repeat(64); f.write();
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /tarball pin/); f.preserved();
+  f.manifest.package_tarball.sha256 = "b39e17850ae6af7c44cde4d952b280fa23f378529071aff68fe61a2da700c8d5";
+  f.manifest.nitro_commit = "0".repeat(40); f.write();
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /source pin/); f.preserved();
+});
+test("local qualification refuses alternate dependency paths and traversal", (t) => {
+  const f = fixture(t); localDelivery(f);
+  fs.writeFileSync(path.join(f.root, "client/package.json"), JSON.stringify({ dependencies: {
+    "react-native-nitro-ark": "file:../../native-ark-package.tgz",
+  } }));
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /app dependency/); f.preserved();
+  localDelivery(f); f.manifest.package_tarball.path = "../native-ark-package.tgz"; f.write();
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /artifact path/); f.preserved();
+});
+test("local qualification refuses a missing or symlink tarball before JNI changes", (t) => {
+  const f = fixture(t); localDelivery(f);
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /ENOENT/); f.preserved();
+  fs.writeFileSync(path.join(f.root, "other.tgz"), "synthetic wrong package");
+  fs.symlinkSync(path.join(f.root, "other.tgz"), path.join(f.root, "native-ark-package.tgz"));
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /regular file/); f.preserved();
+});
+test("local qualification refuses wrong tar bytes before touching existing JNI", (t) => {
+  const f = fixture(t); localDelivery(f);
+  fs.writeFileSync(path.join(f.root, "native-ark-package.tgz"), "synthetic wrong package");
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /tarball byte count/); f.preserved();
+});
+
+// Owned VM only: exercise the actual digest check after the exact size check.
+test("same-size wrong local TGZ is rejected before existing JNI replacement", {
+  skip: process.env.NOAH_INSTALLER_LOCAL_SIZE_NEGATIVE !== "1", timeout: 300_000,
+}, (t) => {
+  const f = fixture(t); localDelivery(f);
+  const filename = path.join(f.root, "native-ark-package.tgz");
+  fs.writeFileSync(filename, "synthetic wrong package"); fs.truncateSync(filename, 492171204);
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /tarball digest/);
+  f.preserved();
+});

@@ -4,6 +4,12 @@ const path = require("path");
 const crypto = require("crypto");
 
 const SDK_COMMIT = "ca568d5a28aa16a2a4fbb853531d869ad22a9724";
+// Actual private qualification package; these bytes are not a published release.
+const LOCAL_PACKAGE = "native-ark-package.tgz";
+const LOCAL_DEPENDENCY = `file:../${LOCAL_PACKAGE}`;
+const LOCAL_NITRO_COMMIT = "a815576182ebebc9db1120a6a629e9c4c1674a5e";
+const LOCAL_PACKAGE_BYTES = 492171204;
+const LOCAL_PACKAGE_SHA256 = "b39e17850ae6af7c44cde4d952b280fa23f378529071aff68fe61a2da700c8d5";
 const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64"];
 const LIBRARIES = ["libbark_cpp.a", "libcxxbridge1.a"];
 const EXPECTED_FILES = ABIS.flatMap((abi) => LIBRARIES.map((lib) => `${abi}/${lib}`)).sort();
@@ -61,7 +67,9 @@ function installOwnedAndroid(projectRoot, manifestPath) {
   // The manifest is public, reviewed build evidence, not a runtime qualification flag.
   regularFile(manifestPath);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  exactKeys(manifest, ["schema_version", "platform", "sdk_git", "sdk_commit", "nitro_git", "nitro_commit", "package_version", "package_sha256", "package_files", "files"], "Artifact manifest");
+  const localDelivery = Object.hasOwn(manifest, "package_tarball");
+  exactKeys(manifest, ["schema_version", "platform", "sdk_git", "sdk_commit", "nitro_git", "nitro_commit", "package_version", "package_sha256", "package_files", "files",
+    ...(localDelivery ? ["package_tarball"] : [])], "Artifact manifest");
   check(manifest.schema_version === 1 && manifest.platform === "android", "Only owned Android artifact schema 1 is supported");
   check(manifest.sdk_git === "https://github.com/BullishNode/abandon-ship-bark.git" && manifest.sdk_commit === SDK_COMMIT, "Artifact SDK source differs");
   check(manifest.nitro_git === "https://github.com/BullishNode/abandon-ship-nitro-ark.git" && /^[0-9a-f]{40}$/.test(manifest.nitro_commit), "Artifact Nitro source differs");
@@ -72,8 +80,22 @@ function installOwnedAndroid(projectRoot, manifestPath) {
   const ownedPackage = typeof dependency === "string" && dependency.match(
     /^https:\/\/github\.com\/BullishNode\/abandon-ship-nitro-ark\/releases\/download\/([0-9a-f]{40})\/react-native-nitro-ark-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/,
   );
-  check(ownedPackage && ownedPackage[1] === manifest.nitro_commit && ownedPackage[2] === manifest.package_version,
-    "Artifact Nitro revision differs from the exact owned app dependency");
+  if (localDelivery) {
+    check(dependency === LOCAL_DEPENDENCY, "Local artifact app dependency differs");
+    check(manifest.nitro_commit === LOCAL_NITRO_COMMIT && manifest.package_version === "0.0.146",
+      "Local artifact source pin differs");
+    const tarball = manifest.package_tarball;
+    exactKeys(tarball, ["path", "bytes", "sha256"], "Local artifact tarball");
+    check(tarball.path === LOCAL_PACKAGE, "Local artifact path differs");
+    check(tarball.bytes === LOCAL_PACKAGE_BYTES && tarball.sha256 === LOCAL_PACKAGE_SHA256,
+      "Local artifact tarball pin differs");
+    const filename = path.join(projectRoot, LOCAL_PACKAGE);
+    check(regularFile(filename).size === tarball.bytes, "Local artifact tarball byte count differs");
+    check(fileDigest(filename) === tarball.sha256, "Local artifact tarball digest differs");
+  } else {
+    check(ownedPackage && ownedPackage[1] === manifest.nitro_commit && ownedPackage[2] === manifest.package_version,
+      "Artifact Nitro revision differs from the exact owned app dependency");
+  }
   check(/^[0-9a-f]{64}$/.test(manifest.package_sha256), "Invalid package digest");
   check(Array.isArray(manifest.files) && manifest.files.length === EXPECTED_FILES.length, "Incomplete Android artifact set");
   const packageDirectory = [
