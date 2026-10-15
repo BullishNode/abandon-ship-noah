@@ -16,13 +16,20 @@ function fixture(t) {
   fs.writeFileSync(path.join(destination, "old-payload"), "preserved");
   const packageBytes = Buffer.from(JSON.stringify({ version: "0.0.146" }));
   fs.writeFileSync(path.join(pkg, "package.json"), packageBytes);
+  fs.mkdirSync(path.join(pkg, "cpp/generated"), { recursive: true });
+  const headerBytes = Buffer.from("fixture public generated CXX source");
+  fs.writeFileSync(path.join(pkg, "cpp/generated/ark_cxx.h"), headerBytes);
   const manifest = {
     schema_version: 1, platform: "android",
     sdk_git: "https://github.com/BullishNode/abandon-ship-bark.git",
     sdk_commit: "ca568d5a28aa16a2a4fbb853531d869ad22a9724",
     nitro_git: "https://github.com/BullishNode/abandon-ship-nitro-ark.git",
     nitro_commit: "1234567890123456789012345678901234567890",
-    package_version: "0.0.146", package_sha256: sha(packageBytes), files: [],
+    package_version: "0.0.146", package_sha256: sha(packageBytes),
+    package_files: [
+      { path: "package.json", bytes: packageBytes.length, sha256: sha(packageBytes) },
+      { path: "cpp/generated/ark_cxx.h", bytes: headerBytes.length, sha256: sha(headerBytes) },
+    ], files: [],
   };
   for (const abi of ["arm64-v8a", "armeabi-v7a", "x86_64"]) {
     fs.mkdirSync(path.join(root, "jniLibs", abi), { recursive: true });
@@ -33,6 +40,10 @@ function fixture(t) {
       manifest.files.push({ path: `${abi}/${lib}`, bytes: bytes.length, sha256: sha(bytes) });
     }
   }
+  fs.mkdirSync(path.join(root, "client"));
+  fs.writeFileSync(path.join(root, "client/package.json"), JSON.stringify({ dependencies: {
+    "react-native-nitro-ark": `https://github.com/BullishNode/abandon-ship-nitro-ark/releases/download/${manifest.nitro_commit}/react-native-nitro-ark-${manifest.package_version}.tgz`,
+  } }));
   const manifestPath = path.join(root, "native-ark-artifacts.json");
   const write = () => fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   write();
@@ -75,4 +86,21 @@ test("exact complete set installs six validated payloads and retained public pro
     assert.equal(bytes.length, entry.bytes); assert.equal(sha(bytes), entry.sha256);
   }
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.destination, "c-native-build-manifest.json"))), f.manifest);
+});
+
+test("wrong Nitro revision and stock app dependency are refused before replacement", (t) => {
+  const f = fixture(t); f.manifest.nitro_commit = "a".repeat(40); f.write();
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /exact owned app dependency/); f.preserved();
+  fs.writeFileSync(path.join(f.root, "client/package.json"), JSON.stringify({ dependencies: { "react-native-nitro-ark": "0.0.144" } }));
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /exact owned app dependency/); f.preserved();
+});
+
+test("same package metadata with changed generated CXX bytes is refused", (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(path.join(f.root, "node_modules/react-native-nitro-ark/cpp/generated/ark_cxx.h"), "stock generated CXX differs");
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /packed source bytes/); f.preserved();
+});
+test("extra unreviewed package source is refused", (t) => {
+  const f = fixture(t); fs.writeFileSync(path.join(f.root, "node_modules/react-native-nitro-ark/extra.js"), "unexpected");
+  assert.throws(() => installOwnedAndroid(f.root, f.manifestPath), /source file set/); f.preserved();
 });

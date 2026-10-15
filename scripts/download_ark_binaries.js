@@ -24,6 +24,21 @@ function exactKeys(value, keys, label) {
   check(JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys.sort()), `${label} fields differ`);
 }
 
+function packageSourceFiles(directory, relative = "") {
+  const files = [];
+  for (const name of fs.readdirSync(path.join(directory, relative)).sort()) {
+    const entry = relative ? `${relative}/${name}` : name;
+    // JNI is replaced in full using the independently validated six-file payload below.
+    if (entry === "android/src/main/jniLibs") continue;
+    const stat = fs.lstatSync(path.join(directory, entry));
+    check(!stat.isSymbolicLink(), "Package source must not contain symlinks");
+    if (stat.isDirectory()) files.push(...packageSourceFiles(directory, entry));
+    else { check(stat.isFile(), "Package source must contain only regular files"); files.push(entry); }
+    check(files.length <= 10000, "Package source inventory is too large");
+  }
+  return files.sort();
+}
+
 function syncDirectory(directory) {
   const fd = fs.openSync(directory, "r");
   try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
@@ -33,10 +48,19 @@ function installOwnedAndroid(projectRoot, manifestPath) {
   // The manifest is public, reviewed build evidence, not a runtime qualification flag.
   regularFile(manifestPath);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  exactKeys(manifest, ["schema_version", "platform", "sdk_git", "sdk_commit", "nitro_git", "nitro_commit", "package_version", "package_sha256", "files"], "Artifact manifest");
+  exactKeys(manifest, ["schema_version", "platform", "sdk_git", "sdk_commit", "nitro_git", "nitro_commit", "package_version", "package_sha256", "package_files", "files"], "Artifact manifest");
   check(manifest.schema_version === 1 && manifest.platform === "android", "Only owned Android artifact schema 1 is supported");
   check(manifest.sdk_git === "https://github.com/BullishNode/abandon-ship-bark.git" && manifest.sdk_commit === SDK_COMMIT, "Artifact SDK source differs");
   check(manifest.nitro_git === "https://github.com/BullishNode/abandon-ship-nitro-ark.git" && /^[0-9a-f]{40}$/.test(manifest.nitro_commit), "Artifact Nitro source differs");
+  // C's app dependency is the independently pinned source of the expected Nitro revision.
+  // The actual release/tarball must exist before client/package.json and its lock are changed.
+  const clientPackage = JSON.parse(fs.readFileSync(path.join(projectRoot, "client/package.json"), "utf8"));
+  const dependency = clientPackage.dependencies?.["react-native-nitro-ark"];
+  const ownedPackage = typeof dependency === "string" && dependency.match(
+    /^https:\/\/github\.com\/BullishNode\/abandon-ship-nitro-ark\/releases\/download\/([0-9a-f]{40})\/react-native-nitro-ark-([0-9]+\.[0-9]+\.[0-9]+)\.tgz$/,
+  );
+  check(ownedPackage && ownedPackage[1] === manifest.nitro_commit && ownedPackage[2] === manifest.package_version,
+    "Artifact Nitro revision differs from the exact owned app dependency");
   check(/^[0-9a-f]{64}$/.test(manifest.package_sha256), "Invalid package digest");
   check(Array.isArray(manifest.files) && manifest.files.length === EXPECTED_FILES.length, "Incomplete Android artifact set");
   const packageDirectory = [
@@ -49,6 +73,21 @@ function installOwnedAndroid(projectRoot, manifestPath) {
   const packageBytes = fs.readFileSync(packageFile);
   check(digest(packageBytes) === manifest.package_sha256, "Installed Nitro package digest differs");
   check(JSON.parse(packageBytes).version === manifest.package_version, "Installed Nitro version differs");
+  check(Array.isArray(manifest.package_files) && manifest.package_files.length > 0 && manifest.package_files.length <= 10000,
+    "Complete packed source inventory is required");
+  const sourcePaths = manifest.package_files.map((entry) => entry.path).sort();
+  check(JSON.stringify(packageSourceFiles(packageDirectory)) === JSON.stringify(sourcePaths),
+    "Installed packed source file set differs");
+  for (const entry of manifest.package_files) {
+    exactKeys(entry, ["path", "bytes", "sha256"], "Package source file");
+    check(typeof entry.path === "string" && !entry.path.includes("\\") && !path.isAbsolute(entry.path)
+      && entry.path.split("/").every((part) => part !== "" && part !== "." && part !== ".."), "Invalid package source path");
+    check(Number.isSafeInteger(entry.bytes) && entry.bytes >= 0 && /^[0-9a-f]{64}$/.test(entry.sha256),
+      "Invalid package source digest or size");
+    const filename = path.join(packageDirectory, entry.path);
+    check(regularFile(filename).size === entry.bytes && digest(fs.readFileSync(filename)) === entry.sha256,
+      "Installed packed source bytes differ");
+  }
   const actualPaths = manifest.files.map((entry) => entry.path).sort();
   check(JSON.stringify(actualPaths) === JSON.stringify(EXPECTED_FILES), "Unexpected or duplicate artifact paths");
   const sourceRoot = path.join(path.dirname(path.resolve(manifestPath)), "jniLibs");
