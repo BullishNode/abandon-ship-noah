@@ -138,7 +138,11 @@ lightning_address: string,
  */
 nostr_pubkey: string | null, };
 
-export type LightningInvoiceRequestNotification = { transaction_id: string, amount: number, };
+export type LightningInvoiceRequestNotification = { transaction_id: string, amount: number, 
+/**
+ * SHA-256 of the exact advertised LNURL metadata UTF-8 bytes, in hex.
+ */
+description_hash: string, };
 
 export type MaintenanceNotification = { notification_k1: string, };
 
