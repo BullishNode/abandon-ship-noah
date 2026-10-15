@@ -20,6 +20,7 @@ import { useWalletStore } from "~/store/walletStore";
 import { formatBitcoinAmount } from "~/lib/bitcoinAmount";
 import { updateWidget } from "~/hooks/useWidget";
 import { shouldUseUnifiedPush } from "~/constants";
+import { TRACK_B_PROFILE } from "~/lib/trackBProfile";
 import { useProfileStore } from "~/store/profileStore";
 import { executeDueRecurringPayments } from "~/lib/recurringPayments";
 
@@ -437,8 +438,8 @@ export async function registerForPushNotificationsAsync(): Promise<
 > {
   await ensureDefaultNotificationChannel();
 
-  // If the device is not a physical device, return a non-supported status
-  if (!Device.isDevice) {
+  // C explicitly qualifies the existing UnifiedPush route on its owned emulator.
+  if (!Device.isDevice && !TRACK_B_PROFILE) {
     return ok({ kind: "device_not_supported" });
   }
 
@@ -464,6 +465,9 @@ export async function registerForPushNotificationsAsync(): Promise<
     } catch (e) {
       log.w("UnifiedPush endpoint lookup failed", [e]);
     }
+  }
+  if (TRACK_B_PROFILE) {
+    return err(new Error("The configured UnifiedPush distributor endpoint is unavailable"));
   }
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
   if (!projectId) {

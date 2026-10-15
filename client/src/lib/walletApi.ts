@@ -69,6 +69,16 @@ import {
   getWalletRefreshExpiryThreshold,
 } from "~/lib/walletConfig";
 
+import { TRACK_B_PROFILE } from "./trackBProfile";
+import { getTrackBSignetProfile } from "./trackBRuntime";
+const preflightBProfile = () =>
+  Result.fromThrowable(
+    () => {
+      if (TRACK_B_PROFILE) getTrackBSignetProfile();
+    },
+    () => new Error("B Signet configuration is unavailable or invalid"),
+  )();
+
 const log = logger("walletApi");
 
 export interface MailboxAuthorizationResult {
@@ -78,6 +88,8 @@ export interface MailboxAuthorizationResult {
 }
 
 const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, Error>> => {
+  const profile = preflightBProfile();
+  if (profile.isErr()) return err(profile.error);
   const isLoadedResult = await ResultAsync.fromPromise(isWalletLoadedNitro(), (e) => e as Error);
   if (isLoadedResult.isErr()) {
     log.error("Failed to check if wallet is loaded", [isLoadedResult.error]);
@@ -144,6 +156,8 @@ const createWalletFromMnemonic = async (mnemonic: string): Promise<Result<void, 
 };
 
 const createOrResumeWallet = async (): Promise<Result<void, Error>> => {
+  const profile = preflightBProfile();
+  if (profile.isErr()) return err(profile.error);
   const mnemonicResult = await getStoredMnemonic();
   if (mnemonicResult.isErr()) {
     return err(mnemonicResult.error);
@@ -201,6 +215,8 @@ export const createWallet = (): Promise<Result<void, Error>> => {
 };
 
 export const restoreWallet = async (mnemonic: string): Promise<Result<boolean, Error>> => {
+  const profile = preflightBProfile();
+  if (profile.isErr()) return err(profile.error);
   const setResult = await setMnemonic(mnemonic);
   if (setResult.isErr()) {
     log.error("Failed to set mnemonic", [setResult.error]);
@@ -223,6 +239,8 @@ export const loadWalletWithMnemonic = async (
   mnemonic: string,
   esploraEndpoint = getEffectiveEsploraEndpoint(),
 ): Promise<Result<boolean, Error>> => {
+  const profile = preflightBProfile();
+  if (profile.isErr()) return err(profile.error);
   const loadResult = await ResultAsync.fromPromise(
     loadWalletNitro(ARK_DATA_PATH, {
       mnemonic,
@@ -391,6 +409,8 @@ const loadWalletFromStorage = async (): Promise<Result<boolean, Error>> => {
 };
 
 export const loadWalletIfNeeded = async (): Promise<Result<boolean, Error>> => {
+  const profile = preflightBProfile();
+  if (profile.isErr()) return err(profile.error);
   const isWalletSuspended = useWalletStore.getState().isWalletSuspended;
   if (isWalletSuspended) {
     log.d("Wallet is suspended, skipping load");

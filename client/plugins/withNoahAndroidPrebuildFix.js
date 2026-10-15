@@ -10,23 +10,22 @@ const path = require("path");
 // - widget/provider files stay in the stable checked-in paths
 const BASE_PACKAGE = "com.noahwallet";
 const MAINNET_APPLICATION_ID = "com.noahwallet.mainnet";
-const SIGNET_APPLICATION_ID = "com.noahwallet.signet";
+const SIGNET_APPLICATION_ID =
+  process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-b"
+    ? "com.noahwallet.trackb.signet"
+    : "com.noahwallet.signet";
 const REGTEST_APPLICATION_ID = "com.noahwallet.regtest";
 
 const SOURCE_FILES = [
   {
     name: "MainActivity.kt",
     targetSegments: ["com", "noahwallet", "MainActivity.kt"],
-    replacements: [
-      ["package com.noahwallet.mainnet", "package com.noahwallet"],
-    ],
+    replacements: [["package com.noahwallet.mainnet", "package com.noahwallet"]],
   },
   {
     name: "MainApplication.kt",
     targetSegments: ["com", "noahwallet", "MainApplication.kt"],
-    replacements: [
-      ["package com.noahwallet.mainnet", "package com.noahwallet"],
-    ],
+    replacements: [["package com.noahwallet.mainnet", "package com.noahwallet"]],
   },
   {
     name: "NoahWidgetProvider.kt",
@@ -70,22 +69,22 @@ function rewriteBuildGradle(contents) {
 
   updated = updated.replace(
     /(defaultConfig\s*\{[\s\S]*?applicationId\s+)['"][^'"]+['"]/,
-    `$1'${BASE_PACKAGE}'`
+    `$1'${BASE_PACKAGE}'`,
   );
 
   updated = updated.replace(
     /(signet\s*\{[\s\S]*?)(applicationIdSuffix\s+['"][^'"]+['"]|applicationId\s+['"][^'"]+['"])/,
-    `$1applicationId '${SIGNET_APPLICATION_ID}'`
+    `$1applicationId '${SIGNET_APPLICATION_ID}'`,
   );
 
   updated = updated.replace(
     /(regtest\s*\{[\s\S]*?)(applicationIdSuffix\s+['"][^'"]+['"]|applicationId\s+['"][^'"]+['"])/,
-    `$1applicationId '${REGTEST_APPLICATION_ID}'`
+    `$1applicationId '${REGTEST_APPLICATION_ID}'`,
   );
 
   updated = updated.replace(
     /(mainnet\s*\{[\s\S]*?applicationId\s+)['"][^'"]+['"]/,
-    `$1'${MAINNET_APPLICATION_ID}'`
+    `$1'${MAINNET_APPLICATION_ID}'`,
   );
 
   return updated;
@@ -119,7 +118,7 @@ function rewriteSourceFileContents(contents, replacements) {
   return replacements.reduce(
     (currentContents, [searchValue, replaceValue]) =>
       currentContents.replaceAll(searchValue, replaceValue),
-    contents
+    contents,
   );
 }
 
@@ -136,7 +135,11 @@ function normalizeSourceTree(androidRoot) {
     fs.mkdirSync(targetDir, { recursive: true });
 
     const sourceContents = fs.readFileSync(sourcePath, "utf8");
-    const rewrittenContents = rewriteSourceFileContents(sourceContents, file.replacements);
+    const normalizedContents =
+      process.env.EXPO_PUBLIC_NOAH_PROFILE === "track-b"
+        ? sourceContents.replaceAll("com.noahwallet.trackb.signet", BASE_PACKAGE)
+        : sourceContents;
+    const rewrittenContents = rewriteSourceFileContents(normalizedContents, file.replacements);
     fs.writeFileSync(targetPath, rewrittenContents, "utf8");
 
     if (sourcePath !== targetPath && fs.existsSync(sourcePath)) {

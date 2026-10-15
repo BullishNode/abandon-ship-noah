@@ -1,7 +1,12 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
-apply plugin: "com.google.gms.google-services"
+def isTrackBProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-b"
+def isTrackBUnifiedPush = isTrackBProfile && System.getenv("EXPO_PUBLIC_NOAH_PUSH_TRANSPORT") == "unifiedpush"
+if (isTrackBProfile && !isTrackBUnifiedPush) {
+    throw new GradleException("B Signet requires its declared UnifiedPush transport")
+}
+if (!isTrackBUnifiedPush) apply plugin: "com.google.gms.google-services"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
@@ -143,7 +148,7 @@ android {
     productFlavors {
         signet {
             dimension 'version'
-            applicationId 'com.noahwallet.signet'
+            applicationId (isTrackBProfile ? 'com.noahwallet.trackb.signet' : 'com.noahwallet.signet')
             versionNameSuffix "-signet"
             resValue "string", "app_name", "Noah (Signet)"
             buildConfigField "String", "APP_VARIANT", '"signet"'

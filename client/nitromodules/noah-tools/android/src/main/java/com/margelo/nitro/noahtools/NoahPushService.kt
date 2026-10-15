@@ -353,6 +353,7 @@ class NoahPushService : PushService() {
             val json = JSONObject(messageString)
             val type = json.optString("notification_type")
             val server = getServerEndpoint(this)
+            if (BuildConfig.TRACK_B_SIGNET_PROFILE && server == null) return
 
             val clazz = Class.forName("com.margelo.nitro.nitroark.NitroArkNative")
             val nativeInstance = clazz.getField("INSTANCE").get(null) ?: return
@@ -754,8 +755,8 @@ class NoahPushService : PushService() {
                 variantJson.requireInt("vtxoRefreshExpiryThreshold"),
                 variantJson.requireLong("fallbackFeeRate"),
                 null,
-                readEsploraFromStorage(context, appVariant)
-                    ?: variantJson.optNullableString("esplora"),
+                if (BuildConfig.TRACK_B_SIGNET_PROFILE) "" else
+                    readEsploraFromStorage(context, appVariant) ?: variantJson.optNullableString("esplora"),
                 variantJson.optNullableString("bitcoind"),
                 variantJson.optNullableString("bitcoindCookie"),
                 variantJson.optNullableString("bitcoindUser"),
@@ -774,8 +775,62 @@ class NoahPushService : PushService() {
         }
     }
 
+    private var pinnedCProfile: String? = null
+
+    private fun validateCProfile(config: JSONObject) {
+        val fields = setOf("version", "profile", "network", "ark", "server", "lnurlDomain", "bitcoind",
+            "bitcoindUser", "bitcoindPass", "vtxoRefreshExpiryThreshold", "fallbackFeeRate",
+            "htlcRecvClaimDelta", "vtxoExitMargin", "roundTxRequiredConfirmations")
+        require(config.keys().asSequence().toSet() == fields)
+        require(config.opt("version") is Number && (config.opt("version") as Number).toDouble() == 1.0 &&
+            config.opt("profile") == "track-b" && config.opt("network") == "signet")
+        fun text(key: String): String {
+            val value = config.opt(key)
+            require(value is String && value.isNotEmpty())
+            return value
+        }
+        fun endpoint(key: String, core: Boolean = false) {
+            val value = text(key)
+            require(value.length <= 2048 && Regex("^[!-~]+$").matches(value))
+            val uri = java.net.URI(value)
+            val host = requireNotNull(uri.host).removePrefix("[").removeSuffix("]").lowercase()
+            require(uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null &&
+                (uri.path.isNullOrEmpty() || uri.path == "/"))
+            val local = Regex("^http://(?:127\\.0\\.0\\.1|\\[::1\\]):([1-9][0-9]{0,4})/?$").matches(value) && uri.port in 1..65535
+            require(uri.port == -1 || uri.port in 1..65535)
+            require(if (core) local else uri.scheme == "https" || local)
+            require(listOf("second.tech", "2nd.dev", "noahwallet.io").none { host == it || host.endsWith(".$it") })
+        }
+        endpoint("ark"); endpoint("server"); endpoint("bitcoind", true)
+        val domain = text("lnurlDomain")
+        require(domain.length <= 253 && Regex("^[a-z0-9][a-z0-9.-]*\\.[a-z0-9]+$").matches(domain) && !domain.contains(".."))
+        require(listOf("second.tech", "2nd.dev", "noahwallet.io").none { domain == it || domain.endsWith(".$it") })
+        require(Regex("^[A-Za-z0-9_.-]{1,128}$").matches(text("bitcoindUser")))
+        require(Regex("^[!-~]{1,256}$").matches(text("bitcoindPass")))
+        for (key in listOf("vtxoRefreshExpiryThreshold", "htlcRecvClaimDelta", "vtxoExitMargin", "roundTxRequiredConfirmations", "fallbackFeeRate")) {
+            val number = config.opt(key)
+            require(number is Number)
+            val value = number.toDouble()
+            val maximum = if (key == "fallbackFeeRate") 9007199254740991.0 else 65535.0
+            require(value.isFinite() && value > 0 && value <= maximum && kotlin.math.floor(value) == value)
+        }
+    }
+
     private fun readConfigJson(context: Context): JSONObject? {
         return try {
+            if (BuildConfig.TRACK_B_SIGNET_PROFILE) {
+                require(getAppVariant(context) == "signet")
+                val file = java.io.File(context.filesDir, "track-b-signet-profile.json")
+                val stat = android.system.Os.lstat(file.absolutePath)
+                require(android.system.OsConstants.S_ISREG(stat.st_mode) && stat.st_uid == android.os.Process.myUid() && (stat.st_mode and 511) == 384)
+                require(file.length() in 1L..8192L)
+                val raw = file.readText(Charsets.UTF_8)
+                require(pinnedCProfile == null || pinnedCProfile == raw)
+                val config = JSONObject(raw)
+                validateCProfile(config)
+                pinnedCProfile = raw
+                return JSONObject().put("signet", config)
+            }
             context.assets.open("noah_bark_config.json").use { input ->
                 val jsonString = input.bufferedReader().use { it.readText() }
                 JSONObject(jsonString)
@@ -784,7 +839,7 @@ class NoahPushService : PushService() {
             NoahToolsLogging.performNativeLog(
                 "error",
                 "NoahPushService",
-                "Failed to read bark config file: ${e.message}"
+                if (BuildConfig.TRACK_B_SIGNET_PROFILE) "B Signet configuration is unavailable or invalid" else "Failed to read bark config file: ${e.message}"
             )
             null
         }

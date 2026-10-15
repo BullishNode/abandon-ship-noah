@@ -25,7 +25,7 @@ class NoahTools : HybridNoahToolsSpec() {
     private fun resolveWidgetComponent(context: Context, appGroup: String): ComponentName? {
         val providerSimpleName = when (appGroup) {
             "com.noahwallet.regtest" -> "NoahWidgetRegtestProvider"
-            "com.noahwallet.signet" -> "NoahWidgetSignetProvider"
+            "com.noahwallet.signet", "com.noahwallet.trackb.signet" -> "NoahWidgetSignetProvider"
             "com.noahwallet.mainnet" -> "NoahWidgetMainnetProvider"
             else -> null
         }
@@ -277,6 +277,7 @@ class NoahTools : HybridNoahToolsSpec() {
         val instance = when (context.packageName) {
             "com.noahwallet.regtest" -> "noah-regtest"
             "com.noahwallet.signet" -> "noah-signet"
+            "com.noahwallet.trackb.signet" -> "noah-track-b-signet"
             else -> "noah-mainnet"
         }
 
@@ -291,6 +292,7 @@ class NoahTools : HybridNoahToolsSpec() {
         val instance = when (context.packageName) {
             "com.noahwallet.regtest" -> "noah-regtest"
             "com.noahwallet.signet" -> "noah-signet"
+            "com.noahwallet.trackb.signet" -> "noah-track-b-signet"
             else -> "noah-mainnet"
         }
 
@@ -338,7 +340,7 @@ class NoahTools : HybridNoahToolsSpec() {
             val context = NitroModules.applicationContext ?: return@async
             val variant = when (context.packageName) {
                 "com.noahwallet.regtest" -> "regtest"
-                "com.noahwallet.signet" -> "signet"
+                "com.noahwallet.signet", "com.noahwallet.trackb.signet" -> "signet"
                 else -> "mainnet"
             }
 
@@ -370,7 +372,7 @@ class NoahTools : HybridNoahToolsSpec() {
             val context = NitroModules.applicationContext ?: return@async
             val variant = when (context.packageName) {
                 "com.noahwallet.regtest" -> "regtest"
-                "com.noahwallet.signet" -> "signet"
+                "com.noahwallet.signet", "com.noahwallet.trackb.signet" -> "signet"
                 else -> "mainnet"
             }
 
@@ -400,7 +402,7 @@ class NoahTools : HybridNoahToolsSpec() {
             val context = NitroModules.applicationContext ?: return@async
             val variant = when (context.packageName) {
                 "com.noahwallet.regtest" -> "regtest"
-                "com.noahwallet.signet" -> "signet"
+                "com.noahwallet.signet", "com.noahwallet.trackb.signet" -> "signet"
                 else -> "mainnet"
             }
 
@@ -425,7 +427,7 @@ class NoahTools : HybridNoahToolsSpec() {
             val context = NitroModules.applicationContext ?: return@async
             val variant = when (context.packageName) {
                 "com.noahwallet.regtest" -> "regtest"
-                "com.noahwallet.signet" -> "signet"
+                "com.noahwallet.signet", "com.noahwallet.trackb.signet" -> "signet"
                 else -> "mainnet"
             }
 
