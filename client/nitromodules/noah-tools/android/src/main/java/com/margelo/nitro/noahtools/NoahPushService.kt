@@ -621,6 +621,7 @@ class NoahPushService : PushService() {
     }
 
     private fun loadWallet(clazz: Class<*>, instance: Any, context: Context) {
+        requireBNativeIdentity(context)
         val packageName = context.packageName
         val appVariant = when {
             packageName.endsWith(".regtest") -> "regtest"
@@ -816,8 +817,15 @@ class NoahPushService : PushService() {
         }
     }
 
+    private fun requireBNativeIdentity(context: Context) {
+        require((context.packageName == "com.noahwallet.trackb.signet") == BuildConfig.TRACK_B_SIGNET_PROFILE) {
+            "Noah native application and build profile do not match"
+        }
+    }
+
     private fun readConfigJson(context: Context): JSONObject? {
         return try {
+            requireBNativeIdentity(context)
             if (BuildConfig.TRACK_B_SIGNET_PROFILE) {
                 require(getAppVariant(context) == "signet")
                 val file = java.io.File(context.filesDir, "track-b-signet-profile.json")

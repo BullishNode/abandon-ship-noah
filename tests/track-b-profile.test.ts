@@ -23,6 +23,9 @@ const fixture = {
   vtxoExitMargin: 12,
   roundTxRequiredConfirmations: 1,
 };
+mock.module("expo-application", () => ({
+  applicationId: "com.noahwallet.trackb.signet",
+}));
 const { parseTrackBProfile } = await import("../client/src/lib/trackBProfile");
 let platform = "android";
 let raw: string | null = null;
@@ -119,6 +122,7 @@ test("missing private file refuses; unsupported iOS refuses before reading", () 
 test("non-Signet refuses before reading in a fresh imported native variant", () => {
   const script = `
     import { mock } from "bun:test";
+    mock.module("expo-application", () => ({ applicationId: "com.noahwallet.trackb.signet" }));
     let reads = 0;
     mock.module("react-native", () => ({ Platform: { OS: "android" } }));
     mock.module("react-native-fs-turbo", () => ({ default: {
@@ -180,7 +184,7 @@ for (const transport of [undefined, "expo"])
       [
         process.execPath,
         "-e",
-        `await import(${JSON.stringify(source("lib/trackBProfile.ts"))})`,
+        `const { mock } = await import("bun:test"); mock.module("expo-application", () => ({ applicationId: "com.noahwallet.trackb.signet" })); await import(${JSON.stringify(source("lib/trackBProfile.ts"))})`,
       ],
       { env },
     );
