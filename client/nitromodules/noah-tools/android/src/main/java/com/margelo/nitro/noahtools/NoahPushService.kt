@@ -26,7 +26,15 @@ class NoahPushService : PushService() {
     private val walletLock = Any()
     private val authLock = Any()
 
+    private fun requireOwnedNativeIdentity(context: Context) {
+        val ownedIds = setOf("com.noahwallet.tracka.signet", "com.noahwallet.trackb.signet", "com.noahwallet.trackc.signet")
+        require(if (BuildConfig.OWNED_A_SIGNET_PROFILE) context.packageName == "com.noahwallet.tracka.signet" else context.packageName !in ownedIds) {
+            "Installed native identity and compiled Noah profile do not match"
+        }
+    }
+
     override fun onCreate() {
+        requireOwnedNativeIdentity(this)
         super.onCreate()
         // Ensure all native libraries used by Nitro (core + modules) are loaded for background process
         JNIOnLoad.initializeNativeNitro()
@@ -326,6 +334,7 @@ class NoahPushService : PushService() {
     }
 
     private fun ensureWalletLoaded(clazz: Class<*>, instance: Any, context: Context) {
+        requireOwnedNativeIdentity(context)
         synchronized(walletLock) {
             val isLoadedMethod = clazz.getMethod("isWalletLoaded")
             val loaded = isLoadedMethod.invoke(instance) as Boolean
@@ -346,6 +355,7 @@ class NoahPushService : PushService() {
     }
 
     override fun onMessage(message: PushMessage, instance: String) {
+        requireOwnedNativeIdentity(this)
         val messageString = String(message.content)
         NoahToolsLogging.performNativeLog("debug", "NoahPushService", "Received message: $messageString")
 
@@ -620,6 +630,7 @@ class NoahPushService : PushService() {
     }
 
     private fun loadWallet(clazz: Class<*>, instance: Any, context: Context) {
+        requireOwnedNativeIdentity(context)
         val packageName = context.packageName
         val appVariant = when {
             packageName.endsWith(".regtest") -> "regtest"
@@ -782,10 +793,16 @@ class NoahPushService : PushService() {
     }
 
     private fun readConfigJson(context: Context): JSONObject? {
+        requireOwnedNativeIdentity(context)
         return try {
             context.assets.open("noah_bark_config.json").use { input ->
                 val jsonString = input.bufferedReader().use { it.readText() }
-                JSONObject(jsonString)
+                val config = JSONObject(jsonString)
+                val assetProfile = config.optJSONObject("signet")?.optNullableString("routingProfile")
+                require(if (BuildConfig.OWNED_A_SIGNET_PROFILE) assetProfile == "track-a-two-step-per-key" else assetProfile == null) {
+                    "Embedded routing asset and compiled Noah profile do not match"
+                }
+                config
             }
         } catch (e: Exception) {
             NoahToolsLogging.performNativeLog(

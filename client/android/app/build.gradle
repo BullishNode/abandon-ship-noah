@@ -148,7 +148,7 @@ android {
     productFlavors {
         signet {
             dimension 'version'
-            applicationId 'com.noahwallet.signet'
+            applicationId (isOwnedASignetProfile ? "com.noahwallet.tracka.signet" : "com.noahwallet.signet")
             versionNameSuffix "-signet"
             resValue "string", "app_name", "Noah (Signet)"
             buildConfigField "String", "APP_VARIANT", '"signet"'

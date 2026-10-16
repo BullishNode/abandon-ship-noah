@@ -6,12 +6,12 @@ for (const transport of [undefined, "expo", "unifiedpush"]) test(`owned A push s
   const env = { ...process.env, EXPO_PUBLIC_NOAH_PROFILE: "track-a-two-step-per-key" };
   if (transport === undefined) delete env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT;
   else env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT = transport;
-  const result = Bun.spawnSync([process.execPath, "-e", `await import(${JSON.stringify(modulePath)})`], { env });
+  const result = Bun.spawnSync([process.execPath, "-e", `const {mock}=await import("bun:test");mock.module("expo-application",()=>({applicationId:"com.noahwallet.tracka.signet"}));await import(${JSON.stringify(modulePath)})`], { env });
   expect(result.exitCode === 0).toBe(transport === "unifiedpush");
   if (transport !== "unifiedpush") expect(new TextDecoder().decode(result.stderr)).toContain("A Signet requires its declared UnifiedPush transport");
 });
 test("stock selection does not require an owned distributor", () => {
   const env = { ...process.env }; delete env.EXPO_PUBLIC_NOAH_PROFILE; delete env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT;
-  const result = Bun.spawnSync([process.execPath, "-e", `await import(${JSON.stringify(modulePath)})`], { env });
+  const result = Bun.spawnSync([process.execPath, "-e", `const {mock}=await import("bun:test");mock.module("expo-application",()=>({applicationId:"com.noahwallet.signet"}));await import(${JSON.stringify(modulePath)})`], { env });
   expect(result.exitCode).toBe(0);
 });

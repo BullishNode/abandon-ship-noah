@@ -20,6 +20,10 @@ def reactNativeArchitectures() {
   return value ? value.split(",") : ["x86_64", "arm64-v8a"]
 }
 
+def ownedAProfile = System.getenv("NOAH_ARK_PROFILE") == "track-a-two-step-per-key"
+def ownedAJsProfile = System.getenv("EXPO_PUBLIC_NOAH_PROFILE") == "track-a-two-step-per-key"
+if (ownedAProfile != ownedAJsProfile) throw new GradleException("A native and JavaScript profiles must be paired")
+
 apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 apply from: '../nitrogen/generated/android/noahtools+autolinking.gradle'
@@ -38,6 +42,7 @@ android {
   defaultConfig {
     minSdkVersion getExtOrIntegerDefault("minSdkVersion")
     targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "OWNED_A_SIGNET_PROFILE", ownedAProfile.toString()
 
     externalNativeBuild {
       cmake {

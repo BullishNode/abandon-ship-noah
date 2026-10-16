@@ -1,3 +1,4 @@
+import { assertOwnedLightningDomain } from "./ownedSignetRouting";
 import {
   boardAmount as boardAmountNitro,
   boardAll as boardAllNitro,
@@ -468,6 +469,11 @@ export const payLightningAddress = async (
   comment: string,
 ): Promise<Result<LightningPayment, Error>> => {
   const normalizedAddress = addr.trim().toLowerCase();
+  try {
+    assertOwnedLightningDomain(normalizedAddress.slice(normalizedAddress.lastIndexOf("@") + 1));
+  } catch (error) {
+    return err(error instanceof Error ? error : new Error("Invalid owned Lightning address domain"));
+  }
 
   return ResultAsync.fromPromise(
     payLightningAddressNitro(normalizedAddress, amountSat, comment, true),

@@ -1,3 +1,4 @@
+import { assertOwnedLightningDomain } from "~/lib/ownedSignetRouting";
 import { sourceText, type Translate } from "~/lib/i18n";
 import { useGT } from "gt-react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -132,6 +133,7 @@ export const resolveLightningAddressPaymentRoute = async (
     throw new Error(gt("Destination is not a lightning address"));
   }
 
+  assertOwnedLightningDomain(parsed.domain);
   const lnurlEndpoint = new URL(`https://${parsed.domain}/.well-known/lnurlp/${parsed.username}`);
   const arkInfoResult = await getArkInfo();
   if (arkInfoResult.isErr()) {
