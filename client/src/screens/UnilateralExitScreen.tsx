@@ -203,6 +203,7 @@ const ExitPhaseRail = ({
     ClaimInProgress: gt("Claim"),
     Claimed: gt("Done"),
     VtxoAlreadySpent: gt("Spent"),
+    VtxoSwept: gt("Swept"),
     Canceled: gt("Canceled"),
   };
   const items = buildExitTimelineItems(
@@ -514,11 +515,7 @@ function exitReviewDescription(
     );
     if (!claimOnly) {
       lines.push(
-        estimate.fundable
-          ? gt("Broadcast funding: sufficient confirmed onchain funds at this estimate.")
-          : gt(
-              "Additional confirmed onchain funds required. You are starting tracking anyway; fund the wallet before progressing.",
-            ),
+        gt("Broadcast fees require confirmed onchain funds. The fee estimate does not check funding availability."),
       );
     }
     const warning = exitFeeWarning(inputs.amountSat, estimate, claimOnly, gt);
@@ -623,11 +620,11 @@ const ExitFeePreview = ({
           {warning}
         </Text>
       ) : null}
-      {!claimOnly && !estimate.fundable ? (
+      {!claimOnly ? (
         <T>
           <Text className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-            Additional confirmed onchain funds required. Deposit funds and wait for confirmation
-            before progressing.
+            Broadcast fees require confirmed onchain funds. The fee estimate does not check funding
+            availability.
           </Text>
         </T>
       ) : null}
@@ -803,7 +800,7 @@ const StartExitPanel = ({
           }
         />
       )}
-      {quote.estimate && !quote.estimate.fundable ? (
+      {quote.estimate ? (
         <>
           <NativeNoahButton
             label={gt("Deposit Onchain Funds")}
@@ -977,6 +974,7 @@ const UnilateralExitScreen = () => {
       ClaimInProgress: 0,
       Claimed: 0,
       VtxoAlreadySpent: 0,
+      VtxoSwept: 0,
       Canceled: 0,
     },
   );

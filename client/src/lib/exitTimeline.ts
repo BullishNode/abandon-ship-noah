@@ -15,6 +15,7 @@ export const EXIT_STATE_ORDER: ExitProgressState[] = [
   "ClaimInProgress",
   "Claimed",
   "VtxoAlreadySpent",
+  "VtxoSwept",
   "Canceled",
 ];
 
@@ -28,6 +29,7 @@ export const getExitStateLabels = (
   ClaimInProgress: gt("Claiming"),
   Claimed: gt("Claimed"),
   VtxoAlreadySpent: gt("Already spent"),
+  VtxoSwept: gt("Swept"),
   Canceled: gt("Canceled"),
 });
 
@@ -89,6 +91,7 @@ export const getClaimableHeight = (details?: ExitStateDetails) =>
 export const isClaimableExit = (exit: ExitVtxoResult, status?: ExitStatusResult) => {
   const state = status?.state ?? exit.state;
   const kind = status?.state_details.kind ?? exit.state_details.kind;
+  if (state === "VtxoSwept") return false;
   return exit.is_claimable || state === "Claimable" || kind === "claimable";
 };
 
@@ -197,6 +200,9 @@ export const getExitBlockRows = (
         details?.txid,
       );
       break;
+    case "VtxoSwept":
+      addRow(gt("Spent backing inputs"), details?.spent_inputs?.join(", "));
+      break;
     case "VtxoAlreadySpent":
       addRow(gt("Last scanned"), formatBlockRef(details?.last_scanned_block));
       addRow(gt("State detail"), formatKind(details?.kind));
@@ -244,6 +250,8 @@ export const getExitStatusText = (
       return details?.block
         ? gt("Claimed in block {value1}", { value1: details.block.height })
         : gt("Claim transaction confirmed");
+    case "VtxoSwept":
+      return gt("Exit backing was swept");
     case "VtxoAlreadySpent":
       return gt("Exit VTXO was already spent");
     case "Canceled":
@@ -305,6 +313,8 @@ const getTimelineDescription = (
       return details?.block
         ? gt("Funds were recovered on-chain in block {value1}.", { value1: details.block.height })
         : gt("Funds were recovered on-chain.");
+    case "VtxoSwept":
+      return gt("A backing input was spent by another transaction. This exit cannot continue.");
     case "VtxoAlreadySpent":
       return gt("Exit tracking found that this VTXO was already spent.");
     case "Canceled":

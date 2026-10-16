@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 globalThis.__DEV__ = false;
+mock.module("expo-application", () => ({ applicationId: "com.noahwallet.mainnet" }));
 
 mock.module("noah-tools", () => ({
   getAppVariant: () => "mainnet",
@@ -30,6 +31,8 @@ const {
   EXIT_STATE_ORDER,
   getExitStatusText,
   isCancelableExit,
+  isClaimableExit,
+  getExitBlockRows,
 } = await import("../../src/lib/exitTimeline");
 
 describe("exit cancellation eligibility", () => {
@@ -115,5 +118,22 @@ describe("canceled exit timelines", () => {
       description: "Exit processing was canceled before completion.",
       isCurrent: true,
     });
+  });
+});
+
+
+describe("swept exit API compatibility", () => {
+  test("preserves the terminal swept input facts without claiming a payout", () => {
+    const details = { kind: "vtxo-swept", tip_height: 220, spent_inputs: ["backing:0"] };
+    expect(getExitStateLabels().VtxoSwept).toBe("Swept");
+    expect(getExitStatusText({ state: "VtxoSwept", details })).toBe("Exit backing was swept");
+    const items = buildExitTimelineItems({ currentState: "VtxoSwept", currentDetails: details });
+    expect(items[0].description).toBe("A backing input was spent by another transaction. This exit cannot continue.");
+    expect(getExitBlockRows({ state: "VtxoSwept", details })).toContainEqual({ label: "Spent backing inputs", value: "backing:0", explorerUrl: null });
+    expect(isCancelableExit("VtxoSwept", details)).toBe(false);
+  });
+  test("a fresh swept status overrides an older claimable flag", () => {
+    const exit = { state: "Claimable", state_details: { kind: "claimable" }, is_claimable: true };
+    expect(isClaimableExit(exit, { state: "VtxoSwept", state_details: { kind: "vtxo-swept" } })).toBe(false);
   });
 });
