@@ -820,7 +820,13 @@ class NoahPushService : PushService() {
     }
 
     private fun requireBNativeIdentity(context: Context) {
-        require((context.packageName == "com.noahwallet.trackb.signet") == BuildConfig.TRACK_B_SIGNET_PROFILE) {
+        require(if (BuildConfig.TRACK_B_SIGNET_PROFILE) {
+            context.packageName == "com.noahwallet.trackb.signet"
+        } else {
+            context.packageName !in setOf(
+                "com.noahwallet.tracka.signet", "com.noahwallet.trackb.signet", "com.noahwallet.trackc.signet"
+            )
+        }) {
             "Noah native application and build profile do not match"
         }
     }

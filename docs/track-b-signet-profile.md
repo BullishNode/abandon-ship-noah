@@ -18,10 +18,13 @@ fresh-process identity mocks and profile controls pass; these are not native
 runtime or APK qualification. Matching build environment values alone are not
 sufficient evidence.
 
-OPEN before any app launch: a foreign owned Track C native ID with a stock
-JavaScript selector was actually admitted by the current JavaScript guard. The
-common source owner is resolving the foreign-owned identity case. Universal
-fail-closed identity handling is not established.
+A tests-first counterexample exposed foreign owned native IDs entering stock
+JavaScript. The source now rejects the three declared Track A/B/C IDs in stock
+selection and requires the exact B ID for B selection. All sixteen fresh-process
+identity mocks and the existing profile controls pass. This closes the selected
+mocked admission cases; native entry guards, actual APK/JS pairing and device
+behavior remain unqualified. Ordinary stock and null identity semantics are
+preserved; this is not a general application-ID allowlist.
 
 Before first app launch, the runtime owner must provision exactly one private
 `track-b-signet-profile.json` in the Android app files directory, owned by that

@@ -8,7 +8,12 @@ if (selectedProfile && selectedProfile !== "stock" && selectedProfile !== "track
 }
 export const TRACK_B_PROFILE = selectedProfile === "track-b";
 // Native package identity, rather than the Expo/Metro selector.
-if ((applicationId === "com.noahwallet.trackb.signet") !== TRACK_B_PROFILE) {
+const ownedNativeApplication = [
+  "com.noahwallet.tracka.signet",
+  "com.noahwallet.trackb.signet",
+  "com.noahwallet.trackc.signet",
+].includes(applicationId ?? "");
+if (TRACK_B_PROFILE ? applicationId !== "com.noahwallet.trackb.signet" : ownedNativeApplication) {
   throw new Error("Noah native application and JavaScript profile do not match");
 }
 if (TRACK_B_PROFILE && process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT !== "unifiedpush") {
