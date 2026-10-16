@@ -11,11 +11,17 @@ still recognizes the`.signet` suffix. Build JS and Android together with
 provenance. Unknown selectors refuse. No B iOS build or standalone iOS intent is
 supported; JS B wallet paths refuse on iOS. Do not install a B iOS artifact.
 
-OPEN before any app launch: JavaScript currently accepts a missing profile
-selector as stock while the native owned app ID can still be B. The common
-fail-closed native/JavaScript identity guard is not implemented in this snapshot.
-Matching build environment values alone do not close this gap. Both missing and
-mismatched selections must refuse before any endpoint or wallet action.
+The B native application ID and JavaScript B selector now require each other.
+Android checks the B application ID against its build flag before push dispatch,
+the already-loaded wallet shortcut, wallet loading and config reads. Selected
+fresh-process identity mocks and profile controls pass; these are not native
+runtime or APK qualification. Matching build environment values alone are not
+sufficient evidence.
+
+OPEN before any app launch: a foreign owned Track C native ID with a stock
+JavaScript selector was actually admitted by the current JavaScript guard. The
+common source owner is resolving the foreign-owned identity case. Universal
+fail-closed identity handling is not established.
 
 Before first app launch, the runtime owner must provision exactly one private
 `track-b-signet-profile.json` in the Android app files directory, owned by that
@@ -50,8 +56,9 @@ supply the explicit wallet policy values; runtime qualification must verify thos
 against the actual B server and configured deadlines. No financial retry,
 readiness bypass, wallet migration or existing recovery rollback is introduced.
 
-Qualification pending: exact Bun controls and typecheck, actual Kotlin/Gradle
-compilation, owned packed Nitro/generated API, full APK link, app-private file
+Selected mocked Bun identity/profile controls pass, and the owned packed Nitro
+package is hash-verified. Qualification pending: full client typecheck, actual
+Kotlin/JNI/native Gradle integration, full APK link, app-private file
 permission/path agreement, actual endpoint/tunnel/RPC traces and native awake/
 background journeys. Synthetic profile controls are not proof of any of these.
 Run each Bun mock test file in a separate process to avoid module-mock leakage.
