@@ -7,9 +7,14 @@ const owned = "com.noahwallet.trackc.signet";
 const mismatch = "Noah native application and JavaScript profile do not match";
 const pairs: [string | undefined, string | null, boolean][] = [
   [undefined, owned, false], ["stock", owned, false],
+  [undefined, "com.noahwallet.tracka.signet", false],
+  ["stock", "com.noahwallet.tracka.signet", false],
+  [undefined, "com.noahwallet.trackb.signet", false],
+  ["stock", "com.noahwallet.trackb.signet", false],
   ["track-c", "com.noahwallet.signet", false],
   ["track-c", "com.noahwallet.mainnet", false],
   ["track-c", "com.noahwallet.regtest", false],
+  ["track-c", "com.noahwallet.tracka.signet", false],
   ["track-c", "com.noahwallet.trackb.signet", false],
   ["track-c", null, false], ["track-c", owned, true],
   [undefined, "com.noahwallet.signet", true],

@@ -8,7 +8,10 @@ if (selectedProfile && selectedProfile !== "stock" && selectedProfile !== "track
 }
 export const TRACK_C_PROFILE = selectedProfile === "track-c";
 // This value comes from the installed native package, not Expo/Metro environment.
-if ((applicationId === "com.noahwallet.trackc.signet") !== TRACK_C_PROFILE) {
+const ownedNativeApplication = [
+  "com.noahwallet.tracka.signet", "com.noahwallet.trackb.signet", "com.noahwallet.trackc.signet",
+].includes(applicationId ?? "");
+if (TRACK_C_PROFILE ? applicationId !== "com.noahwallet.trackc.signet" : ownedNativeApplication) {
   throw new Error("Noah native application and JavaScript profile do not match");
 }
 if (TRACK_C_PROFILE && process.env.EXPO_PUBLIC_NOAH_PUSH_TRANSPORT !== "unifiedpush") {
