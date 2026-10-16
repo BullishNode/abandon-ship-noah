@@ -291,7 +291,7 @@ checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
 [[package]]
 name = "ark-lib"
 version = "0.7.1"
-source = "git+https://gitlab.com/ark-bitcoin/bark?tag=server-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
+source = "git+https://github.com/BullishNode/abandon-ship-bark.git?rev=40a178c00d86da2cffb6548cadf449f6ecd2a559#40a178c00d86da2cffb6548cadf449f6ecd2a559"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -948,7 +948,7 @@ dependencies = [
 [[package]]
 name = "bark-bitcoin-ext"
 version = "0.7.1"
-source = "git+https://gitlab.com/ark-bitcoin/bark?tag=server-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
+source = "git+https://github.com/BullishNode/abandon-ship-bark.git?rev=40a178c00d86da2cffb6548cadf449f6ecd2a559#40a178c00d86da2cffb6548cadf449f6ecd2a559"
 dependencies = [
  "bitcoin",
  "lazy_static",
@@ -960,7 +960,7 @@ dependencies = [
 [[package]]
 name = "bark-server-rpc"
 version = "0.7.1"
-source = "git+https://gitlab.com/ark-bitcoin/bark?tag=server-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
+source = "git+https://github.com/BullishNode/abandon-ship-bark.git?rev=40a178c00d86da2cffb6548cadf449f6ecd2a559#40a178c00d86da2cffb6548cadf449f6ecd2a559"
 dependencies = [
  "ark-lib",
  "bitcoin",
